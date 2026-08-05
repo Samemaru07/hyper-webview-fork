@@ -84,17 +84,31 @@ async function installDevExtensions(isDev_: boolean) {
   const forceDownload = Boolean(process.env.UPGRADE_EXTENSIONS);
 
   return Promise.all(
-    extensions.map((extension) => installer(extension, {forceDownload, loadExtensionOptions: {allowFileAccess: true}}))
+    extensions.map((extension) =>
+      installer(extension, {
+        forceDownload,
+        loadExtensionOptions: {allowFileAccess: true}
+      })
+    )
   );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-misused-promises
 app.on('ready', () =>
   installDevExtensions(isDev)
+    .catch((err) => {
+      // a failed devtools-extension install (e.g. Chrome Web Store CRX
+      // download issues) must never prevent the app window from opening.
+      console.error('Error while loading devtools extensions', err);
+      return [];
+    })
     .then(() => {
       function createWindow(
         fn?: (win: BrowserWindow) => void,
-        options: {size?: [number, number]; position?: [number, number]} = {},
+        options: {
+          size?: [number, number];
+          position?: [number, number];
+        } = {},
         profileName: string = config.getDefaultProfile()
       ) {
         const cfg = plugins.getDecoratedConfig(profileName);
@@ -207,9 +221,6 @@ app.on('ready', () =>
         }
         void installCLI(false);
       }
-    })
-    .catch((err) => {
-      console.error('Error while loading devtools extensions', err);
     })
 );
 

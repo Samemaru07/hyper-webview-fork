@@ -50,7 +50,8 @@ export function newWindow(
     webPreferences: {
       nodeIntegration: true,
       navigateOnDragDrop: true,
-      contextIsolation: false
+      contextIsolation: false,
+      webviewTag: true
     },
     ...options_
   };

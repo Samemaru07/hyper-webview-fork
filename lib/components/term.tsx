@@ -1,6 +1,7 @@
-import {clipboard, shell} from 'electron';
+import {clipboard} from 'electron';
 import React from 'react';
 
+import {webContents} from '@electron/remote';
 import Color from 'color';
 import isEqual from 'lodash/isEqual';
 import pickBy from 'lodash/pickBy';
@@ -126,6 +127,7 @@ export default class Term extends React.PureComponent<
   resizeObserver!: ResizeObserver;
   resizeTimeout!: NodeJS.Timeout;
   searchDecorations: ISearchDecorationOptions;
+  webViewRef: Electron.WebviewTag | null = null;
   state = {
     searchOptions: {
       caseSensitive: false,
@@ -216,7 +218,10 @@ export default class Term extends React.PureComponent<
       this.term.loadAddon(this.searchAddon);
       this.term.loadAddon(
         new WebLinksAddon((event, uri) => {
-          if (shallActivateWebLink(event)) void shell.openExternal(uri);
+          // clicking a link turns this pane into an in-app preview instead
+          // of opening the system browser (see props.webLinksActivationKey
+          // for whether a modifier key is required to activate the link).
+          if (shallActivateWebLink(event)) this.props.onOpenUrl(uri);
         })
       );
       this.term.open(this.termRef);
@@ -510,7 +515,80 @@ export default class Term extends React.PureComponent<
     });
   }
 
+  setWebViewRef = (webView: Electron.WebviewTag | null) => {
+    const hadNoRefBefore = !this.webViewRef;
+    this.webViewRef = webView;
+
+    if (hadNoRefBefore && webView) {
+      // the webview isn't attached to a WebContents yet the instant the ref
+      // callback fires, so defer a tick before wiring up its shortcuts.
+      setTimeout(() => {
+        const wc = webContents.fromId(webView.getWebContentsId());
+        if (!wc) return;
+        wc.setIgnoreMenuShortcuts(true);
+        wc.on('before-input-event', (_event, input) => {
+          if (input.type !== 'keyDown') return;
+          const cmdOrCtrl = input.meta || input.control;
+          if (!cmdOrCtrl) return;
+          if (input.key === 'r') {
+            webView.reload();
+          } else if (input.key === '=' || input.key === '+') {
+            wc.setZoomLevel(wc.getZoomLevel() + 1);
+          } else if (input.key === '-') {
+            wc.setZoomLevel(wc.getZoomLevel() - 1);
+          } else if (input.key === '0') {
+            wc.setZoomLevel(0);
+          }
+        });
+      }, 10);
+    }
+  };
+
   render() {
+    if (this.props.url) {
+      return (
+        <div className={`term_fit ${this.props.isTermActive ? 'term_active' : ''}`}>
+          <webview ref={this.setWebViewRef} src={this.props.url} className="term_webview" />
+          <button
+            className="term_webviewClose"
+            title="Close preview and return to the terminal"
+            onClick={this.props.onCloseUrl}
+          >
+            ×
+          </button>
+          <style jsx>{`
+            .term_webview {
+              display: inline-flex;
+              width: 100%;
+              height: 100%;
+              background: #fff;
+            }
+
+            .term_webviewClose {
+              position: absolute;
+              top: 8px;
+              right: 8px;
+              width: 24px;
+              height: 24px;
+              line-height: 22px;
+              text-align: center;
+              border-radius: 4px;
+              border: none;
+              background: rgba(0, 0, 0, 0.55);
+              color: #fff;
+              font-size: 16px;
+              cursor: pointer;
+              z-index: 10;
+            }
+
+            .term_webviewClose:hover {
+              background: rgba(0, 0, 0, 0.8);
+            }
+          `}</style>
+        </div>
+      );
+    }
+
     return (
       <div className={`term_fit ${this.props.isTermActive ? 'term_active' : ''}`} onMouseUp={this.onMouseUp}>
         {this.props.customChildrenBefore}

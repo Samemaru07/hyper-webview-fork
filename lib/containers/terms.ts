@@ -5,7 +5,9 @@ import {
   setSessionXtermTitle,
   setActiveSession,
   openSearch,
-  closeSearch
+  closeSearch,
+  setSessionUrl,
+  unsetSessionUrl
 } from '../actions/sessions';
 import {openContextMenu} from '../actions/ui';
 import Terms from '../components/terms';
@@ -82,6 +84,14 @@ const mapDispatchToProps = (dispatch: HyperDispatch) => {
 
     onCloseSearch(uid: string) {
       dispatch(closeSearch(uid));
+    },
+
+    onOpenUrl(uid: string, url: string) {
+      dispatch(setSessionUrl(uid, url));
+    },
+
+    onCloseUrl(uid: string) {
+      dispatch(unsetSessionUrl(uid));
     },
 
     onContextMenu(uid: string, selection: string) {

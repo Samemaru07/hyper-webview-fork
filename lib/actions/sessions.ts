@@ -11,7 +11,9 @@ import {
   SESSION_CLEAR_ACTIVE,
   SESSION_USER_DATA,
   SESSION_SET_XTERM_TITLE,
-  SESSION_SEARCH
+  SESSION_SEARCH,
+  SESSION_URL_SET,
+  SESSION_URL_UNSET
 } from '../../typings/constants/sessions';
 import type {HyperState, HyperDispatch, HyperActions} from '../../typings/hyper';
 import rpc from '../rpc';
@@ -160,6 +162,25 @@ export function closeSearch(uid?: string, keyEvent?: any) {
         keyEvent.catched = false;
       }
     }
+  };
+}
+
+export function setSessionUrl(uid: string, url: string) {
+  return (dispatch: HyperDispatch) => {
+    dispatch({
+      type: SESSION_URL_SET,
+      uid,
+      url
+    });
+  };
+}
+
+export function unsetSessionUrl(uid: string) {
+  return (dispatch: HyperDispatch) => {
+    dispatch({
+      type: SESSION_URL_UNSET,
+      uid
+    });
   };
 }
 
