@@ -1,7 +1,7 @@
 import {clipboard} from 'electron';
-import {webContents} from '@electron/remote';
 import React from 'react';
 
+import {webContents} from '@electron/remote';
 import Color from 'color';
 import isEqual from 'lodash/isEqual';
 import pickBy from 'lodash/pickBy';
