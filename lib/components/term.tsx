@@ -520,27 +520,32 @@ export default class Term extends React.PureComponent<
     this.webViewRef = webView;
 
     if (hadNoRefBefore && webView) {
-      // the webview isn't attached to a WebContents yet the instant the ref
-      // callback fires, so defer a tick before wiring up its shortcuts.
-      setTimeout(() => {
-        const wc = webContents.fromId(webView.getWebContentsId());
-        if (!wc) return;
-        wc.setIgnoreMenuShortcuts(true);
-        wc.on('before-input-event', (_event, input) => {
-          if (input.type !== 'keyDown') return;
-          const cmdOrCtrl = input.meta || input.control;
-          if (!cmdOrCtrl) return;
-          if (input.key === 'r') {
-            webView.reload();
-          } else if (input.key === '=' || input.key === '+') {
-            wc.setZoomLevel(wc.getZoomLevel() + 1);
-          } else if (input.key === '-') {
-            wc.setZoomLevel(wc.getZoomLevel() - 1);
-          } else if (input.key === '0') {
-            wc.setZoomLevel(0);
-          }
-        });
-      }, 10);
+      // dom-ready が発火した時点で webContents は確実に取得可能になる。
+      // { once: true } で初回のみ実行し、reload() によって再度 dom-ready が
+      // 発火してもショートカット登録が重複しないようにする。
+      webView.addEventListener(
+        'dom-ready',
+        () => {
+          const wc = webContents.fromId(webView.getWebContentsId());
+          if (!wc) return;
+          wc.setIgnoreMenuShortcuts(true);
+          wc.on('before-input-event', (_event, input) => {
+            if (input.type !== 'keyDown') return;
+            const cmdOrCtrl = input.meta || input.control;
+            if (!cmdOrCtrl) return;
+            if (input.key === 'r') {
+              webView.reload();
+            } else if (input.key === '=' || input.key === '+') {
+              wc.setZoomLevel(wc.getZoomLevel() + 1);
+            } else if (input.key === '-') {
+              wc.setZoomLevel(wc.getZoomLevel() - 1);
+            } else if (input.key === '0') {
+              wc.setZoomLevel(0);
+            }
+          });
+        },
+        {once: true}
+      );
     }
   };
 
