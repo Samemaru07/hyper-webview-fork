@@ -114,6 +114,8 @@ export default class Terms extends React.Component<React.PropsWithChildren<Terms
             onData: this.props.onData,
             onOpenSearch: this.props.onOpenSearch,
             onCloseSearch: this.props.onCloseSearch,
+            onOpenUrl: this.props.onOpenUrl,
+            onCloseUrl: this.props.onCloseUrl,
             onContextMenu: this.props.onContextMenu,
             quickEdit: this.props.quickEdit,
             webGLRenderer: this.props.webGLRenderer,
