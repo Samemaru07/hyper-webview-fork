@@ -11,6 +11,8 @@ export const SESSION_USER_DATA = 'SESSION_USER_DATA';
 export const SESSION_SET_XTERM_TITLE = 'SESSION_SET_XTERM_TITLE';
 export const SESSION_SET_CWD = 'SESSION_SET_CWD';
 export const SESSION_SEARCH = 'SESSION_SEARCH';
+export const SESSION_URL_SET = 'SESSION_URL_SET';
+export const SESSION_URL_UNSET = 'SESSION_URL_UNSET';
 
 export interface SessionAddAction {
   type: typeof SESSION_ADD;
@@ -76,6 +78,15 @@ export interface SessionSearchAction {
   uid: string;
   value: boolean;
 }
+export interface SessionUrlSetAction {
+  type: typeof SESSION_URL_SET;
+  uid: string;
+  url: string;
+}
+export interface SessionUrlUnsetAction {
+  type: typeof SESSION_URL_UNSET;
+  uid: string;
+}
 
 export type SessionActions =
   | SessionAddAction
@@ -90,4 +101,6 @@ export type SessionActions =
   | SessionUserDataAction
   | SessionSetXtermTitleAction
   | SessionSetCwdAction
-  | SessionSearchAction;
+  | SessionSearchAction
+  | SessionUrlSetAction
+  | SessionUrlUnsetAction;

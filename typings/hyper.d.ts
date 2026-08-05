@@ -125,6 +125,7 @@ export type session = {
   splitDirection?: 'HORIZONTAL' | 'VERTICAL';
   activeUid?: string;
   profile: string;
+  url?: string;
 };
 
 export type sessionState = Immutable<{
@@ -306,6 +307,8 @@ export type TermGroupOwnProps = {
   | 'onCloseSearch'
   | 'onData'
   | 'onOpenSearch'
+  | 'onOpenUrl'
+  | 'onCloseUrl'
   | 'onResize'
   | 'onTitle'
   | 'padding'
@@ -378,6 +381,8 @@ export type TermProps = {
   onCursorMove?: (cursorFrame: {x: number; y: number; width: number; height: number; col: number; row: number}) => void;
   onData: (data: string) => void;
   onOpenSearch: () => void;
+  onOpenUrl: (url: string) => void;
+  onCloseUrl: () => void;
   onResize: (cols: number, rows: number) => void;
   onTitle: (title: string) => void;
   padding: string;
@@ -391,6 +396,7 @@ export type TermProps = {
   term: Terminal | null;
   uid: string;
   uiFontFamily: string;
+  url?: string;
   webGLRenderer: boolean;
   webLinksActivationKey: 'ctrl' | 'alt' | 'meta' | 'shift' | '';
   windowsPty?: IWindowsPty;
