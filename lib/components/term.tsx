@@ -550,89 +550,61 @@ export default class Term extends React.PureComponent<
   };
 
   render() {
-    if (this.props.url) {
-      return (
-        <div className={`term_fit ${this.props.isTermActive ? 'term_active' : ''}`}>
-          <webview ref={this.setWebViewRef} src={this.props.url} className="term_webview" />
-          <button
-            className="term_webviewClose"
-            title="Close preview and return to the terminal"
-            onClick={this.props.onCloseUrl}
-          >
-            ×
-          </button>
-          <style jsx>{`
-            .term_webview {
-              display: inline-flex;
-              width: 100%;
-              height: 100%;
-              background: #fff;
-            }
-
-            .term_webviewClose {
-              position: absolute;
-              top: 8px;
-              right: 8px;
-              width: 24px;
-              height: 24px;
-              line-height: 22px;
-              text-align: center;
-              border-radius: 4px;
-              border: none;
-              background: rgba(0, 0, 0, 0.55);
-              color: #fff;
-              font-size: 16px;
-              cursor: pointer;
-              z-index: 10;
-            }
-
-            .term_webviewClose:hover {
-              background: rgba(0, 0, 0, 0.8);
-            }
-          `}</style>
-        </div>
-      );
-    }
-
+    const showWebview = !!this.props.url;
     return (
       <div className={`term_fit ${this.props.isTermActive ? 'term_active' : ''}`} onMouseUp={this.onMouseUp}>
         {this.props.customChildrenBefore}
-        <div ref={this.onTermWrapperRef} className="term_fit term_wrapper" />
+
+        {/* xterm用のコンテナは常にマウントし続ける。webview表示中はCSSで隠すだけ */}
+        <div
+          ref={this.onTermWrapperRef}
+          className="term_fit term_wrapper"
+          style={showWebview ? {display: 'none'} : undefined}
+        />
+
+        {showWebview && (
+          <>
+            <webview ref={this.setWebViewRef} src={this.props.url} className="term_webview" />
+            <button
+              className="term_webviewClose"
+              title="Close preview and return to the terminal"
+              onClick={this.props.onCloseUrl}
+            >
+              ×
+            </button>
+          </>
+        )}
+
         {this.props.customChildren}
-        {this.props.search ? (
-          <SearchBox
-            next={this.searchNext}
-            prev={this.searchPrevious}
-            close={this.closeSearchBox}
-            caseSensitive={this.state.searchOptions.caseSensitive}
-            wholeWord={this.state.searchOptions.wholeWord}
-            regex={this.state.searchOptions.regex}
-            results={this.state.searchResults}
-            toggleCaseSensitive={() =>
-              this.setState({
-                ...this.state,
-                searchOptions: {...this.state.searchOptions, caseSensitive: !this.state.searchOptions.caseSensitive}
-              })
-            }
-            toggleWholeWord={() =>
-              this.setState({
-                ...this.state,
-                searchOptions: {...this.state.searchOptions, wholeWord: !this.state.searchOptions.wholeWord}
-              })
-            }
-            toggleRegex={() =>
-              this.setState({
-                ...this.state,
-                searchOptions: {...this.state.searchOptions, regex: !this.state.searchOptions.regex}
-              })
-            }
-            selectionColor={this.props.selectionColor}
-            backgroundColor={this.props.backgroundColor}
-            foregroundColor={this.props.foregroundColor}
-            borderColor={this.props.borderColor}
-            font={this.props.uiFontFamily}
-          />
-        ) : null}
+        {this.props.search && !showWebview ? <SearchBox /* ...元のprops一式... */ /> : null}
+
+        <style jsx>{`
+          .term_webview {
+            display: inline-flex;
+            width: 100%;
+            height: 100%;
+            background: #fff;
+          }
+          .term_webviewClose {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 24px;
+            height: 24px;
+            line-height: 22px;
+            text-align: center;
+            border-radius: 4px;
+            border: none;
+            background: rgba(0, 0, 0, 0.55);
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            z-index: 10;
+          }
+          .term_webviewClose:hover {
+            background: rgba(0, 0, 0, 0.8);
+          }
+        `}</style>
 
         <style jsx global>{`
           .term_fit {
@@ -640,9 +612,7 @@ export default class Term extends React.PureComponent<
             width: 100%;
             height: 100%;
           }
-
           .term_wrapper {
-            /* TODO: decide whether to keep this or not based on understanding what xterm-selection is for */
             overflow: hidden;
           }
         `}</style>
