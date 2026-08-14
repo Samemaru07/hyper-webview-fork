@@ -521,31 +521,30 @@ export default class Term extends React.PureComponent<
 
     if (hadNoRefBefore && webView) {
       // dom-ready が発火した時点で webContents は確実に取得可能になる。
-      // { once: true } で初回のみ実行し、reload() によって再度 dom-ready が
-      // 発火してもショートカット登録が重複しないようにする。
-      webView.addEventListener(
-        'dom-ready',
-        () => {
-          const wc = webContents.fromId(webView.getWebContentsId());
-          if (!wc) return;
-          wc.setIgnoreMenuShortcuts(true);
-          wc.on('before-input-event', (_event, input) => {
-            if (input.type !== 'keyDown') return;
-            const cmdOrCtrl = input.meta || input.control;
-            if (!cmdOrCtrl) return;
-            if (input.key === 'r') {
-              webView.reload();
-            } else if (input.key === '=' || input.key === '+') {
-              wc.setZoomLevel(wc.getZoomLevel() + 1);
-            } else if (input.key === '-') {
-              wc.setZoomLevel(wc.getZoomLevel() - 1);
-            } else if (input.key === '0') {
-              wc.setZoomLevel(0);
-            }
-          });
-        },
-        {once: true}
-      );
+      // WebviewTag の 'dom-ready' オーバーロードは AddEventListenerOptions を
+      // 受け付けないため、{ once: true } は使わずリスナー参照を保持して
+      // 手動で removeEventListener する（reload() 時の重複登録防止のため）。
+      const onDomReady = () => {
+        webView.removeEventListener('dom-ready', onDomReady);
+        const wc = webContents.fromId(webView.getWebContentsId());
+        if (!wc) return;
+        wc.setIgnoreMenuShortcuts(true);
+        wc.on('before-input-event', (_event, input) => {
+          if (input.type !== 'keyDown') return;
+          const cmdOrCtrl = input.meta || input.control;
+          if (!cmdOrCtrl) return;
+          if (input.key === 'r') {
+            webView.reload();
+          } else if (input.key === '=' || input.key === '+') {
+            wc.setZoomLevel(wc.getZoomLevel() + 1);
+          } else if (input.key === '-') {
+            wc.setZoomLevel(wc.getZoomLevel() - 1);
+          } else if (input.key === '0') {
+            wc.setZoomLevel(0);
+          }
+        });
+      };
+      webView.addEventListener('dom-ready', onDomReady);
     }
   };
 
@@ -576,7 +575,40 @@ export default class Term extends React.PureComponent<
         )}
 
         {this.props.customChildren}
-        {this.props.search && !showWebview ? <SearchBox /* ...元のprops一式... */ /> : null}
+        {this.props.search && !showWebview ? (
+          <SearchBox
+            next={this.searchNext}
+            prev={this.searchPrevious}
+            close={this.closeSearchBox}
+            caseSensitive={this.state.searchOptions.caseSensitive}
+            wholeWord={this.state.searchOptions.wholeWord}
+            regex={this.state.searchOptions.regex}
+            results={this.state.searchResults}
+            toggleCaseSensitive={() =>
+              this.setState({
+                ...this.state,
+                searchOptions: {...this.state.searchOptions, caseSensitive: !this.state.searchOptions.caseSensitive}
+              })
+            }
+            toggleWholeWord={() =>
+              this.setState({
+                ...this.state,
+                searchOptions: {...this.state.searchOptions, wholeWord: !this.state.searchOptions.wholeWord}
+              })
+            }
+            toggleRegex={() =>
+              this.setState({
+                ...this.state,
+                searchOptions: {...this.state.searchOptions, regex: !this.state.searchOptions.regex}
+              })
+            }
+            selectionColor={this.props.selectionColor}
+            backgroundColor={this.props.backgroundColor}
+            foregroundColor={this.props.foregroundColor}
+            borderColor={this.props.borderColor}
+            font={this.props.uiFontFamily}
+          />
+        ) : null}
 
         <style jsx>{`
           .term_webview {
