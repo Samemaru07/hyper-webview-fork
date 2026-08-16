@@ -5,9 +5,11 @@ import type {MousetrapInstance} from 'mousetrap';
 import stylis from 'stylis';
 
 import type {HyperState, HyperProps, HyperDispatch} from '../../typings/hyper';
+import {sendSessionData} from '../actions/sessions';
 import * as uiActions from '../actions/ui';
 import {getRegisteredKeys, getCommandHandler, shouldPreventDefault} from '../command-registry';
 import type Terms from '../components/terms';
+import {SkkEngine} from '../skk/engine';
 import {connect} from '../utils/plugins';
 
 import {HeaderContainer} from './header';
@@ -19,6 +21,71 @@ const isMac = /Mac/.test(navigator.userAgent);
 const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
   const mousetrap = useRef<MousetrapInstance | null>(null);
   const terms = useRef<Terms | null>(null);
+  const skkEngine = useRef(new SkkEngine());
+  const activeSessionRef = useRef(props.activeSession);
+  const sendSessionDataRef = useRef(props.sendSessionData);
+
+  useEffect(() => {
+    activeSessionRef.current = props.activeSession;
+  }, [props.activeSession]);
+
+  useEffect(() => {
+    sendSessionDataRef.current = props.sendSessionData;
+  }, [props.sendSessionData]);
+
+  // PoCスコープ: かな入力モードでの母音・子音の確定のみを対象とする。
+  // ▽漢字変換モード(辞書引き・候補選択)やpreedit表示は対象外。
+  // fcitx5のcomposition機構を一切経由させないよう、windowのcaptureフェーズで
+  // xterm.jsのtextareaに到達する前にイベントを奪う。
+  const handleSkkKeydown = (e: KeyboardEvent) => {
+    // SKKモードのトグル(fcitx5非経由の独自バインド。既存キーマップと衝突しないctrl+jを使用)
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'j') {
+      skkEngine.current.toggleMode();
+      (e as any).catched = true;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    if (skkEngine.current.getMode() !== 'kana') {
+      return;
+    }
+
+    // 修飾キーなしの単一アルファベットキーのみを対象とする
+    if (!e.ctrlKey && !e.altKey && !e.metaKey && /^[a-zA-Z]$/.test(e.key)) {
+      const committed = skkEngine.current.input(e.key.toLowerCase());
+      (e as any).catched = true;
+      e.preventDefault();
+      e.stopPropagation();
+      if (committed && activeSessionRef.current) {
+        sendSessionDataRef.current(activeSessionRef.current, committed);
+      }
+      return;
+    }
+
+    // 未確定バッファがある状態でのバックスペースは、まだ何も端末に送出していないため
+    // バッファの末尾を消すだけに留め、端末側の削除処理には渡さない
+    if (e.key === 'Backspace' && skkEngine.current.hasPendingBuffer()) {
+      skkEngine.current.backspace();
+      (e as any).catched = true;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    // それ以外のキー(space, enter, 句読点, 矢印キー等)はPoCの対象外。
+    // 素通りさせつつ、宙に浮いた未確定バッファがあればリセットする。
+    if (skkEngine.current.hasPendingBuffer()) {
+      skkEngine.current.reset();
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleSkkKeydown, true);
+    return () => {
+      window.removeEventListener('keydown', handleSkkKeydown, true);
+    };
+  }, []);
 
   useEffect(() => {
     void attachKeyListeners();
@@ -156,6 +223,9 @@ const mapDispatchToProps = (dispatch: HyperDispatch) => {
   return {
     execCommand: (command: string, fn: (e: any, dispatch: HyperDispatch) => void, e: any) => {
       dispatch(uiActions.execCommand(command, fn, e));
+    },
+    sendSessionData: (uid: string, data: string) => {
+      dispatch(sendSessionData(uid, data));
     }
   };
 };

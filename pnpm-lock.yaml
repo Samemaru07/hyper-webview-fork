@@ -104,6 +104,9 @@ importers:
       uuid:
         specifier: 9.0.1
         version: 9.0.1
+      wanakana:
+        specifier: 5.3.1
+        version: 5.3.1
       webpack-cli:
         specifier: 5.1.4
         version: 5.1.4(webpack@5.91.0)
@@ -4743,6 +4746,10 @@ packages:
   verror@1.10.0:
     resolution: {integrity: sha512-ZZKSmDAEFOijERBLkmYfJ+vmk3w+7hOLYDNkRCuRuMJGEmqYNCNLyBBFwWKVMhfwaEF3WOd0Zlw86U/WC/+nYw==}
     engines: {'0': node >=0.6.0}
+
+  wanakana@5.3.1:
+    resolution: {integrity: sha512-OSDqupzTlzl2LGyqTdhcXcl6ezMiFhcUwLBP8YKaBIbMYW1wAwDvupw2T9G9oVaKT9RmaSpyTXjxddFPUcFFIw==}
+    engines: {node: '>=12'}
 
   watchboy@0.4.3:
     resolution: {integrity: sha512-GHs1HxwvxSMBsqd/WfTOZhj5gBdMqf5HQpfgtKxDfZRxrlYPDdVLRB61LCeRzJaWANmvSIMlfmRVDwVmJFgAKA==}
@@ -9964,6 +9971,8 @@ snapshots:
       core-util-is: 1.0.2
       extsprintf: 1.4.0
     optional: true
+
+  wanakana@5.3.1: {}
 
   watchboy@0.4.3:
     dependencies:
