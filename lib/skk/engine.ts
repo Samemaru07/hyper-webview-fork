@@ -45,6 +45,15 @@ export class SkkEngine {
     return this.buffer.length > 0;
   }
 
+  /**
+   * 現在の未確定バッファをそのまま返す(preedit表示用)。
+   * バッファの中身は常にASCIIのローマ字綴りであることが保証されている
+   * (かな等への変換が成立した時点でバッファはクリアされるため)。
+   */
+  getBuffer(): string {
+    return this.buffer;
+  }
+
   reset(): void {
     this.buffer = '';
   }

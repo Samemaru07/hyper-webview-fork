@@ -24,6 +24,10 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
   const skkEngine = useRef(new SkkEngine());
   const activeSessionRef = useRef(props.activeSession);
   const sendSessionDataRef = useRef(props.sendSessionData);
+  // ローカルで画面表示しているpreedit(未確定文字列)の文字数。
+  // PTYには送っていない、xterm.js上の見た目だけの表示なので、erase時はこの文字数分だけ
+  // バックスペースで消す。preeditは常にASCIIのローマ字綴りのみ(幅は必ず1)。
+  const preeditLength = useRef(0);
 
   useEffect(() => {
     activeSessionRef.current = props.activeSession;
@@ -33,14 +37,34 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     sendSessionDataRef.current = props.sendSessionData;
   }, [props.sendSessionData]);
 
-  // PoCスコープ: かな入力モードでの母音・子音の確定のみを対象とする。
-  // ▽漢字変換モード(辞書引き・候補選択)やpreedit表示は対象外。
+  /**
+   * 現在のバッファの中身にあわせて、xterm.js上のpreedit表示を同期する。
+   * PTYへは一切送出しない、ローカル描画のみの操作。
+   */
+  const syncPreeditDisplay = (nextBuffer: string) => {
+    const term = terms.current?.getActiveTerm()?.term;
+    if (!term) {
+      preeditLength.current = 0;
+      return;
+    }
+    if (preeditLength.current > 0) {
+      term.write('\b \b'.repeat(preeditLength.current));
+    }
+    if (nextBuffer.length > 0) {
+      term.write(nextBuffer);
+    }
+    preeditLength.current = nextBuffer.length;
+  };
+
+  // かな入力モードでの母音・子音・句読点・長音符の確定、およびpreedit(未確定文字列)の
+  // ローカル表示に対応。▽漢字変換モード(辞書引き・候補選択)は対象外。
   // fcitx5のcomposition機構を一切経由させないよう、windowのcaptureフェーズで
   // xterm.jsのtextareaに到達する前にイベントを奪う。
   const handleSkkKeydown = (e: KeyboardEvent) => {
     // SKKモードのトグル(fcitx5非経由の独自バインド。既存キーマップと衝突しないctrl+jを使用)
     if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'j') {
       skkEngine.current.toggleMode();
+      syncPreeditDisplay('');
       (e as any).catched = true;
       e.preventDefault();
       e.stopPropagation();
@@ -54,6 +78,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     // 修飾キーなしの、かな入力対象キー(アルファベット・句読点・長音符)のみを対象とする
     if (!e.ctrlKey && !e.altKey && !e.metaKey && isSkkInterceptableKey(e.key)) {
       const committed = skkEngine.current.input(e.key.toLowerCase());
+      syncPreeditDisplay(skkEngine.current.getBuffer());
       (e as any).catched = true;
       e.preventDefault();
       e.stopPropagation();
@@ -67,16 +92,18 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     // バッファの末尾を消すだけに留め、端末側の削除処理には渡さない
     if (e.key === 'Backspace' && skkEngine.current.hasPendingBuffer()) {
       skkEngine.current.backspace();
+      syncPreeditDisplay(skkEngine.current.getBuffer());
       (e as any).catched = true;
       e.preventDefault();
       e.stopPropagation();
       return;
     }
 
-    // それ以外のキー(space, enter, 句読点, 矢印キー等)はPoCの対象外。
-    // 素通りさせつつ、宙に浮いた未確定バッファがあればリセットする。
+    // それ以外のキー(space, enter, 矢印キー等)はPoCの対象外。
+    // 素通りさせつつ、宙に浮いた未確定バッファがあればリセットし、preedit表示も消す。
     if (skkEngine.current.hasPendingBuffer()) {
       skkEngine.current.reset();
+      syncPreeditDisplay('');
     }
   };
 

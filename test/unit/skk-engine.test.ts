@@ -106,3 +106,13 @@ test('isSkkInterceptableKeyはアルファベット・句読点・長音符の�
   t.false(isSkkInterceptableKey('Enter'));
   t.false(isSkkInterceptableKey('Backspace'));
 });
+
+test('getBufferは未確定バッファの中身をそのまま返す(preedit表示用)', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.getBuffer(), '');
+  engine.input('k');
+  t.is(engine.getBuffer(), 'k');
+  engine.input('a');
+  t.is(engine.getBuffer(), '');
+});
