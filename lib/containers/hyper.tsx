@@ -9,7 +9,7 @@ import {sendSessionData} from '../actions/sessions';
 import * as uiActions from '../actions/ui';
 import {getRegisteredKeys, getCommandHandler, shouldPreventDefault} from '../command-registry';
 import type Terms from '../components/terms';
-import {SkkEngine} from '../skk/engine';
+import {isSkkInterceptableKey, SkkEngine} from '../skk/engine';
 import {connect} from '../utils/plugins';
 
 import {HeaderContainer} from './header';
@@ -51,8 +51,8 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       return;
     }
 
-    // 修飾キーなしの単一アルファベットキーのみを対象とする
-    if (!e.ctrlKey && !e.altKey && !e.metaKey && /^[a-zA-Z]$/.test(e.key)) {
+    // 修飾キーなしの、かな入力対象キー(アルファベット・句読点・長音符)のみを対象とする
+    if (!e.ctrlKey && !e.altKey && !e.metaKey && isSkkInterceptableKey(e.key)) {
       const committed = skkEngine.current.input(e.key.toLowerCase());
       (e as any).catched = true;
       e.preventDefault();

@@ -6,6 +6,19 @@ export type SkkMode = 'ascii' | 'kana';
 // 例: 存在しないローマ字綴りを打ち続けた場合など。
 const MAX_PENDING_BUFFER_LENGTH = 4;
 
+// 句読点・長音符。未確定の子音バッファがある状態でこれらが来た場合は、
+// 中途半端な合成(例: "k" + "-" -> "kー")を避けるため、バッファを先にリテラル確定してから
+// 句読点/長音符を独立して変換する。
+const PUNCTUATION_CHARS = new Set([',', '.', '-']);
+
+/**
+ * かな入力モードで直接ハンドリング対象とすべきキーかどうかを判定する。
+ * 呼び出し側(hyper.tsx)のkeydownハンドラで、xterm.jsへの素通しを止めるかの判定に使う。
+ */
+export function isSkkInterceptableKey(key: string): boolean {
+  return /^[a-zA-Z]$/.test(key) || PUNCTUATION_CHARS.has(key);
+}
+
 /**
  * SKKのローマ字→かな変換・モード管理を担う最小限のステートマシン。
  *
@@ -42,6 +55,14 @@ export class SkkEngine {
    * 空文字でない場合はその文字列を確定として端末に送出してよい。
    */
   input(char: string): string {
+    if (PUNCTUATION_CHARS.has(char) && this.buffer.length > 0) {
+      // 未確定バッファがある状態での句読点/長音符は、バッファをリテラルとして
+      // 先に確定し、句読点/長音符は独立して変換する。
+      const pendingLiteral = this.buffer;
+      this.buffer = '';
+      return pendingLiteral + toKana(char, {IMEMode: true});
+    }
+
     this.buffer += char;
 
     const converted = toKana(this.buffer, {IMEMode: true});

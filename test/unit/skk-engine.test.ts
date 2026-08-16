@@ -1,6 +1,6 @@
 import test from 'ava';
 
-import {SkkEngine} from '../../lib/skk/engine';
+import {isSkkInterceptableKey, SkkEngine} from '../../lib/skk/engine';
 
 test('母音単体はそのまま確定する', (t) => {
   const engine = new SkkEngine();
@@ -59,4 +59,50 @@ test('存在しない綴りを打ち続けた場合、安全弁でリテラル�
   t.is(engine.input('q'), '');
   // 4文字目でMAX_PENDING_BUFFER_LENGTHに達し、リテラルとして吐き出される
   t.is(engine.input('q'), 'qqqq');
+});
+
+test('読点(,)は全角の「、」に変換される', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input(','), '、');
+});
+
+test('句点(.)は全角の「。」に変換される', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('.'), '。');
+});
+
+test('長音符(-)は全角の「ー」に変換される', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('-'), 'ー');
+});
+
+test('母音の後の長音符は正しく結合される(例: aー)', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('a'), 'あ');
+  t.is(engine.input('-'), 'ー');
+});
+
+test('未確定バッファがある状態で句読点が来た場合、バッファをリテラル確定してから句読点を独立して変換する', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('k'), '');
+  t.true(engine.hasPendingBuffer());
+  t.is(engine.input(','), 'k、');
+  t.false(engine.hasPendingBuffer());
+});
+
+test('isSkkInterceptableKeyはアルファベット・句読点・長音符のみtrueを返す', (t) => {
+  t.true(isSkkInterceptableKey('a'));
+  t.true(isSkkInterceptableKey('Z'));
+  t.true(isSkkInterceptableKey(','));
+  t.true(isSkkInterceptableKey('.'));
+  t.true(isSkkInterceptableKey('-'));
+  t.false(isSkkInterceptableKey('1'));
+  t.false(isSkkInterceptableKey(' '));
+  t.false(isSkkInterceptableKey('Enter'));
+  t.false(isSkkInterceptableKey('Backspace'));
 });
