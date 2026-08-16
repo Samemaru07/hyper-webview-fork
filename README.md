@@ -1,116 +1,89 @@
-![](https://assets.vercel.com/image/upload/v1549723846/repositories/hyper/hyper-3-repo-banner.png)
+![hyper-logo](https://assets.vercel.com/image/upload/v1549723846/repositories/hyper/hyper-3-repo-banner.png)
 
-<p align="center">
-  <a aria-label="Vercel logo" href="https://vercel.com">
-    <img src="https://img.shields.io/badge/MADE%20BY%20Vercel-000000.svg?style=for-the-badge&logo=vercel&labelColor=000000&logoWidth=20">
-  </a>
- </p>
-  
-[![Node CI](https://github.com/vercel/hyper/workflows/Node%20CI/badge.svg?event=push)](https://github.com/vercel/hyper/actions?query=workflow%3A%22Node+CI%22+branch%3Acanary+event%3Apush)
-[![Changelog #213](https://img.shields.io/badge/changelog-%23213-lightgrey.svg)](https://changelog.com/213)
+###### 🇯🇵 [日本語](./README.JP.md) | 🇺🇸 English
 
-For more details, head to: https://hyper.is
+# Hyper Webview Fork
 
-## Project goals
+A personal fork based on [vercel/hyper](https://github.com/vercel/hyper) (`canary` branch).
+The goal is to restore the webview preview feature that was removed from upstream for security reasons, and to set up a terminal environment suited for daily use.
 
-The goal of the project is to create a beautiful and extensible experience for command-line interface users, built on open web standards. In the beginning, our focus will be primarily around speed, stability and the development of the correct API for extension authors.
+## Relationship to upstream
 
-In the future, we anticipate the community will come up with innovative additions to enhance what could be the simplest, most powerful and well-tested interface for productivity.
+-   Forked from: [vercel/hyper](https://github.com/vercel/hyper) (`canary` branch)
+-   The webview implementation logic is based on the `built-in-webview` branch of [craftzdog/hyper](https://github.com/craftzdog/hyper).
+    -   Reference article: [Getting side-by-side preview in a terminal app Hyper](https://dev.to/craftzdog/getting-side-by-side-preview-in-a-terminal-app-hyper-20ii)
+
+## Features
+
+### Webview preview
+
+Split a pane (`Ctrl + Shift + D`), then click a URL printed in the terminal to display it in a webview in the adjacent pane.
+
+### Custom settings via `hyper.json`
+
+Supports the config file format used by the upstream `canary` generation (distinct from the legacy `.hyper.js` format).
+
+## Tested environments
+
+-   Verified on Arch Linux (Hyprland / Wayland)
+-   Also verified on WSL (Ubuntu)
+
+## Setup
+
+```bash
+pnpm install
+```
+
+### Development
+
+```bash
+# Terminal 1
+pnpm run dev
+
+# Terminal 2
+pnpm run app
+```
+
+### Build
+
+```bash
+pnpm run build
+```
+
+> Runs a production build (includes a full type check via `tsc -b`).
+
+### Producing a built app
+
+```bash
+npx electron-builder --linux dir
+```
+
+This generates a standalone binary at `dist/linux-unpacked/hyper`, directly under the project directory.
+
+> 🔵 Note\
+> Formal packaging (pacman, AppImage, etc.) is currently in progress.
 
 ## Usage
 
-[Download the latest release!](https://hyper.is/#installation)
+-   Split a pane (`Ctrl + Shift + D`), then click a URL printed in the terminal to display it in a webview in the adjacent pane.
+-   To zoom the displayed web page in or out, **click on the web page first**, then use `Ctrl + +` / `Ctrl + -`.
 
-### Linux
-#### Arch and derivatives
-Hyper is available in the [AUR](https://aur.archlinux.org/packages/hyper/). Use an AUR [package manager](https://wiki.archlinux.org/index.php/AUR_helpers) e.g. [paru](https://github.com/Morganamilo/paru)
+## Configuration file
 
-```sh
-paru -S hyper
-```
+Placed at `~/.config/Hyper/hyper.json`. If the file doesn't exist yet, it's created automatically on first launch (migrated from `~/.hyper.js` if present, otherwise generated from the defaults).
 
-#### NixOS
-Hyper is available as [Nix package](https://github.com/NixOS/nixpkgs/blob/master/pkgs/applications/misc/hyper/default.nix), to install the app run this command:
+A `schema.json` for editor autocompletion is also placed in the same directory automatically on every launch.
 
-```sh
-nix-env -i hyper
-```
+Simply adding a plugin to the `plugins` array does not install it automatically.
+Run `Tools` → `Update plugins` (`Ctrl + Shift + U`) from the menu.
 
-### macOS
+For details on each configuration option, refer to upstream's type definitions ([`typings/config.d.ts`](https://github.com/vercel/hyper/blob/canary/typings/config.d.ts)).
 
-Use [Homebrew Cask](https://brew.sh) to download the app by running these commands:
+## Known limitations & roadmap
 
-```bash
-brew update
-brew install --cask hyper
-```
+-   Investigating an fcitx5-skk issue where vowel-initial input passes through unconverted in romaji.
+-   Windows support is planned but not yet started.
 
-### Windows
+## License
 
-Use [chocolatey](https://chocolatey.org/) to install the app by running the following command (package information can be found [here](https://chocolatey.org/packages/hyper/)):
-
-```bash
-choco install hyper
-```
-
-**Note:** The version available on [Homebrew Cask](https://brew.sh), [Chocolatey](https://chocolatey.org), [Snapcraft](https://snapcraft.io/store) or the [AUR](https://aur.archlinux.org) may not be the latest. Please consider downloading it from [here](https://hyper.is/#installation) if that's the case.
-
-## Contribute
-
-Regardless of the platform you are working on, you will need to have pnpm available. The recommended way is to enable it with Corepack: `corepack enable pnpm`.
-
-1. Install necessary packages:
-  * Windows
-    - Be sure to run `pnpm add --global windows-build-tools` from an elevated prompt (as an administrator) to install `windows-build-tools`.
-  * macOS
-    - Once you have enabled pnpm, you can skip this section!
-  * Linux (You can see [here](https://en.wikipedia.org/wiki/List_of_Linux_distributions) what your Linux is based on.)
-    - RPM-based
-        + `GraphicsMagick`
-        + `libicns-utils`
-        + `xz` (Installed by default on some distributions.)
-    - Debian-based
-        + `graphicsmagick`
-        + `icnsutils`
-        + `xz-utils`
-2. [Fork](https://help.github.com/articles/fork-a-repo/) this repository to your own GitHub account and then [clone](https://help.github.com/articles/cloning-a-repository/) it to your local device
-3. Install the dependencies: `pnpm install`
-4. Build the code and watch for changes: `pnpm run dev`
-5. To run `hyper`
-  * `pnpm run app` from another terminal tab/window/pane
-  * If you are using **Visual Studio Code**, select `Launch Hyper` in debugger configuration to launch a new Hyper instance with debugger attached.
-  * If you interrupt `pnpm run dev`, you'll need to relaunch it each time you want to test something. Webpack will watch changes and will rebuild renderer code when needed (and only what have changed). You'll just have to relaunch electron by using `pnpm run app` or VSCode launch task.
-
-To make sure that your code works in the finished application, you can generate the binaries like this:
-
-```bash
-pnpm run dist
-```
-
-After that, you will see the binary in the `./dist` folder!
-
-#### Known issues that can happen during development
-
-##### Error building `node-pty`
-
-If after building during development you get an alert dialog related to `node-pty` issues,
-make sure its build process is working correctly by running `pnpm run rebuild-node-pty`.
-
-If you are on macOS, this typically is related to Xcode issues (like not having agreed
-to the Terms of Service by running `sudo xcodebuild` after a fresh Xcode installation).
-
-##### Error with `C++` on macOS when running `pnpm install`
-
-If you are getting compiler errors when running `pnpm install` add the environment variable `export CXX=clang++`
-
-##### Error with `codesign` on macOS when running `pnpm run dist`
-
-If you have issues in the `codesign` step when running `pnpm run dist` on macOS, you can temporarily disable code signing locally by setting
-`export CSC_IDENTITY_AUTO_DISCOVERY=false` for the current terminal session.
-
-## Related Repositories
-
-- [Website](https://github.com/vercel/hyper-site)
-- [Sample Extension](https://github.com/vercel/hyperpower)
-- [Sample Theme](https://github.com/vercel/hyperyellow)
-- [Awesome Hyper](https://github.com/bnb/awesome-hyper)
+[MIT](./LICENSE) (inherited from the upstream vercel/hyper license)
