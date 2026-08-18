@@ -1,4 +1,4 @@
-import React, {forwardRef, useEffect, useRef} from 'react';
+import React, {forwardRef, useEffect, useRef, useState} from 'react';
 
 import Mousetrap from 'mousetrap';
 import type {MousetrapInstance} from 'mousetrap';
@@ -24,6 +24,10 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
   const skkEngine = useRef(new SkkEngine());
   const activeSessionRef = useRef(props.activeSession);
   const sendSessionDataRef = useRef(props.sendSessionData);
+  // 画面右下に表示するSKKモードインジケーター。null(英字入力)の場合は非表示。
+  // skkEngineの状態はrefで保持しているためReactの再レンダリングをトリガーしない。
+  // インジケーター表示のためだけに、変化しうるタイミングでこのstateを都度同期する。
+  const [skkIndicator, setSkkIndicator] = useState<string | null>(null);
   // ローカルで画面表示しているpreedit(未確定文字列・▽読み・▼候補)の表示幅(桁数)。
   // PTYには送っていない、xterm.js上の見た目だけの表示なので、erase時はこの桁数分だけ
   // バックスペースで消す。ひらがな・漢字等の全角文字は2桁として数える。
@@ -95,6 +99,27 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     }
   };
 
+  /**
+   * skkEngineの現在のモード・サブモードにあわせて、画面右下のインジケーター表示を同期する。
+   * skkEngineの状態はrefで保持しているため、変化しうる操作の後は都度これを呼ぶ必要がある。
+   */
+  const updateSkkIndicator = () => {
+    if (skkEngine.current.getMode() !== 'kana') {
+      setSkkIndicator(null);
+      return;
+    }
+    switch (skkEngine.current.getSubMode()) {
+      case 'henkan-reading':
+        setSkkIndicator('▽');
+        break;
+      case 'henkan-select':
+        setSkkIndicator('▼');
+        break;
+      default:
+        setSkkIndicator('あ');
+    }
+  };
+
   // かな入力モードでの母音・子音・句読点・長音符の確定、▽漢字変換モード(読み入力・辞書引き・
   // ▼候補選択)、およびpreedit(未確定文字列・読み・候補)のローカル表示に対応。
   // fcitx5のcomposition機構を一切経由させないよう、windowのcaptureフェーズで
@@ -111,6 +136,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'j') {
       skkEngine.current.toggleMode();
       syncPreeditDisplay();
+      updateSkkIndicator();
       (e as any).catched = true;
       e.preventDefault();
       e.stopPropagation();
@@ -127,6 +153,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     if (subMode !== 'direct' && e.key === 'Escape') {
       skkEngine.current.cancel();
       syncPreeditDisplay();
+      updateSkkIndicator();
       (e as any).catched = true;
       e.preventDefault();
       e.stopPropagation();
@@ -146,6 +173,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       } else {
         syncPreeditDisplay();
       }
+      updateSkkIndicator();
       return;
     }
 
@@ -157,6 +185,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       e.stopPropagation();
       erasePreeditDisplay();
       commitToTerminal(committed);
+      updateSkkIndicator();
       return;
     }
 
@@ -176,6 +205,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       } else {
         syncPreeditDisplay();
       }
+      updateSkkIndicator();
       return;
     }
 
@@ -184,6 +214,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     if (e.key === 'Backspace' && (skkEngine.current.hasPendingBuffer() || subMode !== 'direct')) {
       skkEngine.current.backspace();
       syncPreeditDisplay();
+      updateSkkIndicator();
       (e as any).catched = true;
       e.preventDefault();
       e.stopPropagation();
@@ -194,6 +225,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     if (skkEngine.current.hasPendingBuffer() || subMode !== 'direct') {
       skkEngine.current.reset();
       syncPreeditDisplay();
+      updateSkkIndicator();
     }
   };
 
@@ -287,6 +319,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         <HeaderContainer />
         <TermsContainer ref_={onTermsRef} />
         {props.customInnerChildren}
+        {skkIndicator && <div className="skk_indicator">{skkIndicator}</div>}
       </div>
 
       <NotificationsContainer />
@@ -307,6 +340,22 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
           .hyper_mainRounded {
             border-radius: 10.5px;
             overflow: hidden;
+          }
+
+          .skk_indicator {
+            position: absolute;
+            right: 10px;
+            bottom: 10px;
+            min-width: 20px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.65);
+            color: #fff;
+            font-family: monospace;
+            font-size: 14px;
+            text-align: center;
+            pointer-events: none;
+            z-index: 100;
           }
         `}
       </style>
