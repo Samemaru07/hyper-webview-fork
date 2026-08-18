@@ -9,6 +9,7 @@ import {sendSessionData} from '../actions/sessions';
 import * as uiActions from '../actions/ui';
 import {getRegisteredKeys, getCommandHandler, shouldPreventDefault} from '../command-registry';
 import type Terms from '../components/terms';
+import {preloadLargeDictionary} from '../skk/dictionary';
 import {isSkkInterceptableKey, SkkEngine} from '../skk/engine';
 import {connect} from '../utils/plugins';
 
@@ -134,7 +135,12 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
 
     // SKKモードのトグル(fcitx5非経由の独自バインド。既存キーマップと衝突しないctrl+jを使用)
     if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'j') {
-      skkEngine.current.toggleMode();
+      const newMode = skkEngine.current.toggleMode();
+      if (newMode === 'kana') {
+        // SKKモードが初めてkanaに切り替わったタイミングで、大規模辞書(SKK-JISYO.L)の
+        // 非同期読み込みを開始する(2回目以降の呼び出しはpreloadLargeDictionary内部で無視される)。
+        preloadLargeDictionary();
+      }
       syncPreeditDisplay();
       updateSkkIndicator();
       (e as any).catched = true;

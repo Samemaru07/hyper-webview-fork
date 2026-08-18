@@ -1,5 +1,6 @@
 import test from 'ava';
 
+import {preloadLargeDictionary, lookupCandidates} from '../../lib/skk/dictionary';
 import {isSkkInterceptableKey, SkkEngine} from '../../lib/skk/engine';
 
 test('母音単体はそのまま確定する', (t) => {
@@ -298,4 +299,18 @@ test('henkan-select中に句読点を入力すると、候補が暗黙的に確�
   engine.space();
   t.is(engine.input(','), '漢字、');
   t.is(engine.getSubMode(), 'direct');
+});
+
+test.serial('preloadLargeDictionary呼び出し前は、SKK-JISYO.L(大規模辞書)にしかないエントリは見つからない', (t) => {
+  // 「あーくとう」はSKK-JISYO.Lにのみ存在し、SKK-JISYO.Sには含まれない
+  t.deepEqual(lookupCandidates('あーくとう'), []);
+});
+
+test.serial('preloadLargeDictionaryの読み込み完了後は、SKK-JISYO.L(大規模辞書)にしかないエントリも見つかる', async (t) => {
+  preloadLargeDictionary();
+  // 動的importの完了を待つため、読み込みが終わるまでポーリングする
+  for (let i = 0; i < 50 && lookupCandidates('あーくとう').length === 0; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  t.deepEqual(lookupCandidates('あーくとう'), ['アーク灯']);
 });

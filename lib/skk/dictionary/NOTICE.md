@@ -1,9 +1,11 @@
 # 辞書データの出典
 
-`skk-jisyo-s.ts`は、[skk-dev/dict](https://github.com/skk-dev/dict)が配布する
-`SKK-JISYO.S`を元に生成した．
+`skk-jisyo-s.ts`・`skk-jisyo-l.ts`はいずれも、[skk-dev/dict](https://github.com/skk-dev/dict)が
+配布する辞書ファイルを元に生成した．
 
-- 元データ: https://github.com/skk-dev/dict/blob/master/SKK-JISYO.S
+- 元データ:
+  - https://github.com/skk-dev/dict/blob/master/SKK-JISYO.S (約2,400エントリ、数十KB)
+  - https://github.com/skk-dev/dict/blob/master/SKK-JISYO.L (約13万エントリ、約5MB)
 - ライセンス: GNU General Public License version 2, or (at your option) any later version
 - Maintainer: SKK Development Team <skk@ring.gr.jp>
 
@@ -17,3 +19,10 @@
   (`.json`ではなく`.ts`にしているのは、このプロジェクトのwebpack.config.tsに設定された
   古いjson-loaderがwebpack5のネイティブJSON対応と衝突するため)
 - 候補の注釈(`;`以降の説明文)を除去
+
+## 使い分け(lib/skk/dictionary.ts)
+
+`SKK-JISYO.L`はサイズが大きく、アプリ起動時に同期的にバンドル読み込みすると
+起動時間に無視できない影響(手元の計測で100〜300ms程度)が出るため、
+SKKモードが初めて有効化されたタイミングで動的import(非同期)する方式にしている．
+読み込みが完了するまでの間は、常にバンドルされている`SKK-JISYO.S`を代わりに使う．
