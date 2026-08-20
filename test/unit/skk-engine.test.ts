@@ -52,14 +52,15 @@ test('toggleModeで英字入力⇔かな入力を切り替え、バッファを�
   t.false(engine.hasPendingBuffer());
 });
 
-test('存在しない綴りを打ち続けた場合、安全弁でリテラルとして確定する', (t) => {
+test('存在しない綴り(bx)は子音の置き換えにより解消され、無限に蓄積されない', (t) => {
+  // qのように一部のアルファベットはwanakana側で特別な意味(っくぁ等)を持つため、
+  // 確実にどの母音を続けても変換が成立しないbxの組み合わせで検証する。
   const engine = new SkkEngine();
   engine.toggleMode();
-  t.is(engine.input('q'), '');
-  t.is(engine.input('q'), '');
-  t.is(engine.input('q'), '');
-  // 4文字目でMAX_PENDING_BUFFER_LENGTHに達し、リテラルとして吐き出される
-  t.is(engine.input('q'), 'qqqq');
+  t.is(engine.input('b'), '');
+  t.is(engine.getDisplay(), 'b');
+  t.is(engine.input('x'), ''); // bxはどの母音でも変換が成立しないため、xに置き換わる
+  t.is(engine.getDisplay(), 'x');
 });
 
 test('読点(,)は全角の「、」に変換される', (t) => {
@@ -306,11 +307,68 @@ test.serial('preloadLargeDictionary呼び出し前は、SKK-JISYO.L(大規模辞
   t.deepEqual(lookupCandidates('あーくとう'), []);
 });
 
-test.serial('preloadLargeDictionaryの読み込み完了後は、SKK-JISYO.L(大規模辞書)にしかないエントリも見つかる', async (t) => {
-  preloadLargeDictionary();
-  // 動的importの完了を待つため、読み込みが終わるまでポーリングする
-  for (let i = 0; i < 50 && lookupCandidates('あーくとう').length === 0; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 20));
+test.serial(
+  'preloadLargeDictionaryの読み込み完了後は、SKK-JISYO.L(大規模辞書)にしかないエントリも見つかる',
+  async (t) => {
+    preloadLargeDictionary();
+    // 動的importの完了を待つため、読み込みが終わるまでポーリングする
+    for (let i = 0; i < 50 && lookupCandidates('あーくとう').length === 0; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    t.deepEqual(lookupCandidates('あーくとう'), ['アーク灯']);
   }
-  t.deepEqual(lookupCandidates('あーくとう'), ['アーク灯']);
+);
+
+test('子音の置き換え: mの後にdを打つと、mがdに置き換わりdaでだに変換できる', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('m'), '');
+  t.is(engine.getDisplay(), 'm');
+  t.is(engine.input('d'), ''); // mがdに置き換わる(バックスペース不要)
+  t.is(engine.getDisplay(), 'd');
+  t.is(engine.input('a'), 'だ');
+});
+
+test('子音の置き換え: 拗音(kya)は置き換え対象にならず、そのまま蓄積が続く', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('k'), '');
+  t.is(engine.input('y'), ''); // kyは継続可能(kya/kyu/kyo)なので置き換えない
+  t.is(engine.getDisplay(), 'ky');
+  t.is(engine.input('a'), 'きゃ');
+});
+
+test('子音の置き換え: sh(しゃ行)も置き換え対象にならない', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('s'), '');
+  t.is(engine.input('h'), ''); // shは継続可能(sha/shi/shu/she/sho)なので置き換えない
+  t.is(engine.input('a'), 'しゃ');
+});
+
+test('子音の置き換え: 促音(同じ子音の繰り返し)も置き換え対象にならない', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('t'), '');
+  t.is(engine.input('t'), ''); // ttは継続可能(tta等)なので置き換えない
+  t.is(engine.getDisplay(), 'tt');
+  t.is(engine.input('a'), 'った');
+});
+
+test('子音の置き換え: 連続して2回置き換わるケース(m→b→d)', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  engine.input('m');
+  engine.input('b'); // mがbに置き換わる(mbはどの母音でも成立しない)
+  t.is(engine.getDisplay(), 'b');
+  engine.input('d'); // bがdに置き換わる(bdはどの母音でも成立しない)
+  t.is(engine.getDisplay(), 'd');
+  t.is(engine.input('a'), 'だ');
+});
+
+test('子音の置き換え: 母音は通常通りバッファに追加され置き換えの対象外', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  engine.input('k');
+  t.is(engine.input('a'), 'か'); // 母音なので通常通り完成する
 });

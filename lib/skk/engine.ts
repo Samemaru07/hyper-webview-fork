@@ -13,13 +13,16 @@ export type SkkMode = 'ascii' | 'kana';
 export type KanaSubMode = 'direct' | 'henkan-reading' | 'henkan-select';
 
 // バッファが指定文字数を超えても完成しない場合、無限に溜め込まないための安全弁。
-// 例: 存在しないローマ字綴りを打ち続けた場合など。
+// 子音の置き換え(canContinueBuffer)導入により、通常はバッファが2文字を超える前に
+// 完成/置き換えのいずれかで解消されるため、実際にはほぼ到達しない防御的なフォールバック。
 const MAX_PENDING_BUFFER_LENGTH = 4;
 
 // 句読点・長音符。未確定の子音バッファがある状態でこれらが来た場合は、
 // 中途半端な合成(例: "k" + "-" -> "kー")を避けるため、バッファを先にリテラル確定してから
 // 句読点/長音符を独立して変換する。
 const PUNCTUATION_CHARS = new Set([',', '.', '-']);
+
+const VOWELS = new Set(['a', 'i', 'u', 'e', 'o']);
 
 /**
  * かな入力モードで直接ハンドリング対象とすべきキーかどうかを判定する。
@@ -92,6 +95,22 @@ export class SkkEngine {
   }
 
   /**
+   * 現在のバッファに`nextChar`を追加した場合、いずれかの母音を続けることで
+   * 変換が成立する見込みがあるかどうかを判定する。ハードコードした拗音の組み合わせ表を
+   * 持たず、実際にwanakanaへ「バッファ+nextChar+各母音」を試させることで判定する
+   * (例: "k"+"y"は"kya"が成立するのでtrue、"m"+"d"はどの母音でも成立しないのでfalse)。
+   */
+  private canContinueBuffer(nextChar: string): boolean {
+    const candidate = this.buffer + nextChar;
+    for (const vowel of VOWELS) {
+      if (!/[a-z]/i.test(toKana(candidate + vowel, {IMEMode: true}))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * ローマ字1文字をバッファに追加し、変換が成立すればその結果を返す(未成立なら空文字)。
    * PUNCTUATION_CHARSの特別扱いを含む、direct/henkan-reading共通のローマ字→かな変換処理。
    */
@@ -100,6 +119,15 @@ export class SkkEngine {
       const pendingLiteral = this.buffer;
       this.buffer = '';
       return pendingLiteral + toKana(char, {IMEMode: true});
+    }
+
+    // 子音の置き換え: 未確定の子音バッファがある状態で母音以外の文字が来て、
+    // かつその組み合わせではどの母音を続けても変換が成立する見込みがない場合、
+    // バックスペースなしでバッファを今回の入力に置き換える
+    // (例: "m"の後に"d"→バッファが"d"になり、"da"で「だ」に変換できる)。
+    if (this.buffer.length > 0 && !VOWELS.has(char) && !PUNCTUATION_CHARS.has(char) && !this.canContinueBuffer(char)) {
+      this.buffer = char;
+      return '';
     }
 
     this.buffer += char;
