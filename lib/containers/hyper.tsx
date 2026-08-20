@@ -117,7 +117,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         setSkkIndicator('▼');
         break;
       default:
-        setSkkIndicator('あ');
+        setSkkIndicator(skkEngine.current.getScript() === 'katakana' ? 'ア' : 'あ');
     }
   };
 

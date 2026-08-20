@@ -372,3 +372,65 @@ test('子音の置き換え: 母音は通常通りバッファに追加され置
   engine.input('k');
   t.is(engine.input('a'), 'か'); // 母音なので通常通り完成する
 });
+
+test('qキー(direct中、バッファが空)でひらがな/カタカナのscriptがトグルされる', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.getScript(), 'hiragana');
+  t.is(engine.input('q'), ''); // トグルのみ、何も確定しない
+  t.is(engine.getScript(), 'katakana');
+  t.is(engine.input('k'), '');
+  t.is(engine.input('a'), 'カ'); // カタカナで確定される
+  t.is(engine.input('q'), '');
+  t.is(engine.getScript(), 'hiragana');
+  t.is(engine.input('k'), '');
+  t.is(engine.input('a'), 'か'); // ひらがなに戻る
+});
+
+test('qキーはバッファが空のときのみ有効。子音が未確定の状態では通常の子音置き換えとして処理される', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('k'), '');
+  t.is(engine.getScript(), 'hiragana');
+  engine.input('q'); // kにqを続けても、どの母音でも成立しないためqへ置き換わるだけ(scriptはトグルされない)
+  t.is(engine.getScript(), 'hiragana');
+});
+
+test('句読点・長音符はカタカナscriptでも変化しない', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  engine.input('q');
+  t.is(engine.input(','), '、');
+  t.is(engine.input('-'), 'ー');
+});
+
+test('henkan-reading中にqを押すと、辞書引きせず読みをその場でカタカナ化して確定する', (t) => {
+  const engine = new SkkEngine(testLookup);
+  engine.toggleMode();
+  engine.inputUpper('k');
+  'ore'.split('').forEach((c) => engine.input(c));
+  t.is(engine.getDisplay(), 'これ');
+  t.is(engine.input('q'), 'コレ');
+  t.is(engine.getSubMode(), 'direct');
+});
+
+test('katakanaモード中に開始したhenkan-readingの読みは、scriptに関わらず常にひらがなで蓄積される(辞書キーのため)', (t) => {
+  const engine = new SkkEngine(testLookup);
+  engine.toggleMode();
+  engine.input('q'); // katakanaモードに切り替え
+  engine.inputUpper('k');
+  'anji'.split('').forEach((c) => engine.input(c));
+  t.is(engine.getDisplay(), 'かんじ'); // ひらがなのまま
+  engine.space();
+  t.is(engine.getDisplay(), '漢字'); // 辞書引きも正常に機能する
+});
+
+test('toggleMode(ctrl+j)でscriptもhiraganaにリセットされる', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  engine.input('q');
+  t.is(engine.getScript(), 'katakana');
+  engine.toggleMode(); // ascii
+  engine.toggleMode(); // kana、この時点でscriptがリセットされているはず
+  t.is(engine.getScript(), 'hiragana');
+});
