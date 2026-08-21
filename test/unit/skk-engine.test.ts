@@ -531,3 +531,39 @@ test('送り仮名: 実際の辞書データを使い、KaKuが書くに変換�
   t.is(engine.getDisplay(), '書く');
   t.is(engine.confirm(), '書く');
 });
+
+test('送り仮名: 送り仮名マーカーの文字自体でモーラが完成する場合(母音1文字)、即座に辞書引きされる(使う)', (t) => {
+  const testLookupU = (reading: string): string[] => {
+    const dict: Record<string, string[]> = {つかu: ['使']};
+    return dict[reading] ?? [];
+  };
+  const engine = new SkkEngine(testLookupU);
+  engine.toggleMode();
+  engine.inputUpper('t');
+  engine.input('s');
+  engine.input('u');
+  engine.input('k');
+  engine.input('a');
+  t.is(engine.getDisplay(), 'つか');
+  t.is(engine.inputUpper('u'), ''); // uだけで「う」が完成し、即座に辞書引き→henkan-select
+  t.is(engine.getSubMode(), 'henkan-select');
+  t.is(engine.getDisplay(), '使う');
+});
+
+test('送り仮名: 使う。のように直後に句点が来ても正しく「使う。」と確定する(元バグの再現ケース)', (t) => {
+  const testLookupU = (reading: string): string[] => {
+    const dict: Record<string, string[]> = {つかu: ['使']};
+    return dict[reading] ?? [];
+  };
+  const engine = new SkkEngine(testLookupU);
+  engine.toggleMode();
+  engine.inputUpper('t');
+  engine.input('s');
+  engine.input('u');
+  engine.input('k');
+  engine.input('a');
+  engine.inputUpper('u');
+  t.is(engine.getDisplay(), '使う');
+  t.is(engine.input('.'), '使う。'); // henkan-select中の句点で暗黙確定+句点も確定
+  t.is(engine.getSubMode(), 'direct');
+});

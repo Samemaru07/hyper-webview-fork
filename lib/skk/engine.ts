@@ -289,10 +289,16 @@ export class SkkEngine {
       this.okuriKana = '';
     }
     if (this.subMode === 'henkan-reading' && this.okuriConsonant === null && this.reading.length > 0) {
-      // 2箇所目の大文字: 送り仮名の開始マーカー。この子音自体を送り仮名ローマ字バッファの
-      // 先頭文字として扱う(例: "OkuRu"の"R" → okuriConsonant="r"、buffer="r")。
+      // 2箇所目の大文字: 送り仮名の開始マーカー。この文字自体をconvertRawCharに通す。
+      // 「使う」のように送り仮名が母音1文字(う)から始まる場合、この1文字だけで
+      // 既にモーラが完成するため、即座に辞書引きへ進む必要がある
+      // (単に「未確定として次の文字を待つ」と決め打ちしない)。
       this.okuriConsonant = char;
-      this.buffer = char;
+      const kana = this.convertRawChar(char);
+      if (kana) {
+        this.okuriKana = kana;
+        return implicitlyConfirmed + this.finishOkuriLookup();
+      }
       return implicitlyConfirmed;
     }
     if (this.subMode === 'henkan-reading' && this.okuriConsonant === null) {
