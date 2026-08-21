@@ -40,12 +40,13 @@ export function isSkkInterceptableKey(key: string): boolean {
 }
 
 /**
- * SKKのローマ字→かな変換・モード管理・漢字変換(▽/▼)を担うステートマシン。
+ * SKKのローマ字→かな変換・モード管理・漢字変換(▽/▼)・送り仮名変換を担うステートマシン。
  *
- * MVPスコープ:
- * - かな入力モードでの母音・子音・句読点・長音符の確定
+ * スコープ:
+ * - かな入力モードでの母音・子音・句読点・長音符の確定、子音の置き換え
  * - ▽漢字変換モード: 読み入力・辞書引き・▼候補選択・確定/キャンセル
- * - 送り仮名(活用語尾を伴う変換)は対象外
+ * - 送り仮名(活用語尾を伴う変換、例: 「OkuRu」→「送る」)
+ * - qキーによるひらがな/カタカナの切り替え
  * - 辞書はコンストラクタで注入可能(テスト用にモック差し替えできるように)
  */
 export class SkkEngine {
@@ -58,6 +59,12 @@ export class SkkEngine {
   private candidates: string[] = [];
   private candidateIndex = 0;
   private script: KanaScript = 'hiragana';
+  // 送り仮名のトリガーとなった子音1文字(小文字)。nullなら送り仮名なしの通常変換。
+  // 2箇所目の大文字入力で設定される。辞書検索キーは `reading + okuriConsonant` になる
+  // (例: 「おく」+「r」→「おくr」、SKK-JISYO側の送り仮名エントリ形式と一致)。
+  private okuriConsonant: string | null = null;
+  // 送り仮名として確定したかな(1モーラ分)。候補と結合して最終的な確定文字列を作る。
+  private okuriKana = '';
 
   constructor(private readonly lookup: (reading: string) => string[] = lookupCandidates) {}
 
@@ -94,6 +101,10 @@ export class SkkEngine {
       return this.candidates[this.candidateIndex] ?? '';
     }
     if (this.subMode === 'henkan-reading') {
+      if (this.okuriConsonant !== null) {
+        // 送り仮名待ち: 本家SKKの慣習にならい「*」で送り仮名部分の開始を示す
+        return this.reading + '*' + this.buffer;
+      }
       return this.reading + this.buffer;
     }
     return this.buffer;
@@ -104,6 +115,8 @@ export class SkkEngine {
     this.reading = '';
     this.candidates = [];
     this.candidateIndex = 0;
+    this.okuriConsonant = null;
+    this.okuriKana = '';
   }
 
   /**
@@ -189,22 +202,45 @@ export class SkkEngine {
   }
 
   /**
+   * 送り仮名のローマ字が1モーラ分完成した時点で、`reading + okuriConsonant`をキーに
+   * 辞書引きし、各候補に送り仮名を結合してhenkan-selectへ遷移する。
+   * 候補が0件の場合は、読み+送り仮名をそのままかなとして確定してdirectに戻る。
+   */
+  private finishOkuriLookup(): string {
+    const key = this.reading + (this.okuriConsonant ?? '');
+    const candidates = this.lookup(key);
+    if (candidates.length === 0) {
+      const literal = this.applyScript(this.reading) + this.applyScript(this.okuriKana);
+      this.resetHenkan();
+      return literal;
+    }
+    this.candidates = candidates.map((c) => c + this.okuriKana);
+    this.candidateIndex = 0;
+    this.subMode = 'henkan-select';
+    // okuriConsonantはここではクリアしない。キャンセル時に送り仮名ローマ字入力を
+    // やり直せるよう、マーカーとして保持し続ける(resetHenkan()で最終的にクリアされる)。
+    return '';
+  }
+
+  /**
    * 小文字キー入力。
    * - direct中: 確定した文字列をそのまま返す(未確定なら空文字)。呼び出し側がPTYへ送出する。
-   * - henkan-reading中: 読みバッファに追加するだけで、常に空文字を返す
+   * - henkan-reading中(送り仮名マーカーなし): 読みバッファに追加するだけで、常に空文字を返す
    *   (確定はspace/confirmで行うため、ここでは何もPTYに送出しない)。
+   * - henkan-reading中(送り仮名マーカーあり): 送り仮名のローマ字として処理する。
+   *   1モーラ分完成した時点で自動的に辞書引きし、henkan-selectへ遷移する。
    * - henkan-select中: 現在の候補を暗黙的に確定してから、この文字はdirect相当として処理する。
    *   戻り値は「暗黙確定した候補」+「この文字による新たな確定分(あれば)」の連結。
    *
    * qキー(バッファが空の状態)は特別扱いする。
    * - direct中: ひらがな/カタカナのscriptをトグルするだけで、何も確定しない。
-   * - henkan-reading中: 辞書引きせず、蓄積済みの読みをその場でカタカナ化して確定する
-   *   (本家SKKのショートカット動作に合わせた挙動)。
+   * - henkan-reading中(送り仮名マーカーなし): 辞書引きせず、蓄積済みの読みをその場で
+   *   カタカナ化して確定する(本家SKKのショートカット動作に合わせた挙動)。
    */
   input(char: string): string {
     const implicitlyConfirmed = this.implicitConfirmIfNeeded();
 
-    if (char === 'q' && this.buffer.length === 0) {
+    if (char === 'q' && this.buffer.length === 0 && this.okuriConsonant === null) {
       if (this.subMode === 'direct') {
         this.script = this.script === 'hiragana' ? 'katakana' : 'hiragana';
         return implicitlyConfirmed;
@@ -216,6 +252,15 @@ export class SkkEngine {
       }
     }
 
+    if (this.subMode === 'henkan-reading' && this.okuriConsonant !== null) {
+      const kana = this.convertRawChar(char);
+      if (!kana) {
+        return implicitlyConfirmed;
+      }
+      this.okuriKana = kana;
+      return implicitlyConfirmed + this.finishOkuriLookup();
+    }
+
     if (this.subMode === 'henkan-reading') {
       this.reading += this.convertRawChar(char);
       return implicitlyConfirmed;
@@ -224,10 +269,11 @@ export class SkkEngine {
   }
 
   /**
-   * 大文字キー入力。direct中なら▽漢字変換モードを開始する。
-   * henkan-select中の大文字は、現在の候補を暗黙的に確定してから、新たな▽漢字変換モードを開始する。
-   * henkan-reading中の大文字は、送り仮名開始トリガー(MVPスコープ外)ではなく、
-   * 通常の読み文字として扱う。
+   * 大文字キー入力。
+   * - direct中: ▽漢字変換モードを開始する。
+   * - henkan-reading中(読みが1文字以上あり、まだ送り仮名マーカーなし): 送り仮名の開始
+   *   マーカーとして扱う。以降の小文字入力は送り仮名のローマ字として処理される。
+   * - henkan-select中の大文字は、現在の候補を暗黙的に確定してから、新たな▽漢字変換モードを開始する。
    * 戻り値は「暗黙確定した候補」(なければ空文字)。呼び出し側がPTYへ送出する。
    */
   inputUpper(char: string): string {
@@ -239,8 +285,17 @@ export class SkkEngine {
       this.subMode = 'henkan-reading';
       this.reading = '';
       this.buffer = '';
+      this.okuriConsonant = null;
+      this.okuriKana = '';
     }
-    if (this.subMode === 'henkan-reading') {
+    if (this.subMode === 'henkan-reading' && this.okuriConsonant === null && this.reading.length > 0) {
+      // 2箇所目の大文字: 送り仮名の開始マーカー。この子音自体を送り仮名ローマ字バッファの
+      // 先頭文字として扱う(例: "OkuRu"の"R" → okuriConsonant="r"、buffer="r")。
+      this.okuriConsonant = char;
+      this.buffer = char;
+      return implicitlyConfirmed;
+    }
+    if (this.subMode === 'henkan-reading' && this.okuriConsonant === null) {
       this.reading += this.convertRawChar(char);
     }
     return implicitlyConfirmed;
@@ -254,6 +309,10 @@ export class SkkEngine {
    * - direct中: このメソッドは呼ばれない想定(呼び出し側でスペースを素通しする)。
    */
   space(): string {
+    if (this.subMode === 'henkan-reading' && this.okuriConsonant !== null) {
+      // 送り仮名のローマ字入力中はSpaceに意味を持たせない(母音入力で自動的に確定されるため)
+      return '';
+    }
     if (this.subMode === 'henkan-reading') {
       if (this.buffer) {
         // 未確定ローマ字が残っている場合、変換不能な残骸として読みにそのまま追加する
@@ -285,6 +344,10 @@ export class SkkEngine {
    * - direct中: このメソッドは呼ばれない想定(呼び出し側で通常のEnter処理に委ねる)。
    */
   confirm(): string {
+    if (this.subMode === 'henkan-reading' && this.okuriConsonant !== null) {
+      // 送り仮名のローマ字入力中はEnterに意味を持たせない
+      return '';
+    }
     if (this.subMode === 'henkan-select') {
       const chosen = this.candidates[this.candidateIndex];
       this.resetHenkan();
@@ -303,25 +366,40 @@ export class SkkEngine {
   }
 
   /**
-   * Ctrl+g / Escape。変換を1段階キャンセルする。
-   * - henkan-select中: 候補選択をやめてhenkan-readingに戻る(読みは保持)。
-   * - henkan-reading中: 読み入力自体を破棄してdirectに戻る。
+   * Escape。変換を1段階キャンセルする。
+   * - henkan-select中(送り仮名変換由来): 送り仮名ローマ字入力待ちの状態に戻る
+   *   (マーカーは残したまま、送り仮名の入力だけやり直せる)。
+   * - henkan-select中(通常変換): 候補選択をやめてhenkan-readingに戻る(読みは保持)。
+   * - henkan-reading中(送り仮名マーカーあり): マーカーを解除し、通常の▽読み入力に戻る。
+   * - henkan-reading中(送り仮名マーカーなし): 読み入力自体を破棄してdirectに戻る。
    */
   cancel(): void {
     if (this.subMode === 'henkan-select') {
       this.subMode = 'henkan-reading';
       this.candidates = [];
       this.candidateIndex = 0;
+      if (this.okuriConsonant !== null) {
+        // 送り仮名のローマ字入力からやり直せるよう、マーカー(子音)はバッファにも残した状態
+        // (「送り仮名待ち」の直前の状態)に戻し、確定済みの送り仮名かなだけクリアする。
+        this.buffer = this.okuriConsonant;
+        this.okuriKana = '';
+      }
       return;
     }
     if (this.subMode === 'henkan-reading') {
+      if (this.okuriConsonant !== null) {
+        this.okuriConsonant = null;
+        this.buffer = '';
+        return;
+      }
       this.resetHenkan();
     }
   }
 
   /**
    * バックスペース。
-   * - 未確定ローマ字バッファがあれば、その末尾を1文字削る。
+   * - 未確定ローマ字バッファがあれば、その末尾を1文字削る
+   *   (送り仮名マーカーの子音1文字だけが残っている状態では、マーカー自体を解除する)。
    * - henkan-reading中でバッファが空なら、読みの末尾を1文字削る
    *   (読みも空になったらdirectに戻る)。
    * - henkan-select中は候補選択をキャンセルしhenkan-readingに戻る(cancel()と同じ)。
@@ -333,6 +411,11 @@ export class SkkEngine {
       return true;
     }
     if (this.buffer.length > 0) {
+      if (this.okuriConsonant !== null && this.buffer.length === 1) {
+        this.okuriConsonant = null;
+        this.buffer = '';
+        return true;
+      }
       this.buffer = this.buffer.slice(0, -1);
       return true;
     }
