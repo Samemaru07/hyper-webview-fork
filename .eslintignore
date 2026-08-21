@@ -12,3 +12,5 @@ dist
 target
 cache
 schema.json
+
+lib/skk/dictionary
