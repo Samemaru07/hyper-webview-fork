@@ -145,6 +145,22 @@ export class SkkEngine {
   }
 
   /**
+   * 未確定のローマ字バッファを、最終確定用に解決する。
+   * IMEMode:falseで変換することで、単独の"n"は「ん」に確定される
+   * (IMEMode:trueだと「nn」等の続きを期待して"n"のまま止まってしまうため)。
+   * "sh"のような真に不完全な綴りは、それでも変換できずローマ字のまま返る。
+   * space/confirm(Enter)など、「これ以上入力が続かない」ことが確定したタイミングでのみ使う。
+   */
+  private resolveTrailingBuffer(): string {
+    if (!this.buffer) {
+      return '';
+    }
+    const resolved = toKana(this.buffer, {IMEMode: false});
+    this.buffer = '';
+    return resolved;
+  }
+
+  /**
    * ローマ字1文字をバッファに追加し、変換が成立すればその結果を返す(未成立なら空文字)。
    * PUNCTUATION_CHARSの特別扱いを含む、direct/henkan-reading共通のローマ字→かな変換処理。
    * 常にひらがなで返す(辞書の見出し語キーとして使うため、scriptの影響を受けない)。
@@ -321,9 +337,9 @@ export class SkkEngine {
     }
     if (this.subMode === 'henkan-reading') {
       if (this.buffer) {
-        // 未確定ローマ字が残っている場合、変換不能な残骸として読みにそのまま追加する
-        this.reading += this.buffer;
-        this.buffer = '';
+        // 未確定ローマ字が残っている場合、最終解決してから読みに追加する
+        // (単独の"n"は「ん」に、"sh"のような真に不完全な綴りはリテラルのまま)
+        this.reading += this.resolveTrailingBuffer();
       }
       const candidates = this.lookup(this.reading);
       if (candidates.length === 0) {
@@ -361,8 +377,8 @@ export class SkkEngine {
     }
     if (this.subMode === 'henkan-reading') {
       if (this.buffer) {
-        this.reading += this.buffer;
-        this.buffer = '';
+        // 未確定ローマ字が残っている場合、最終解決してから読みに追加する
+        this.reading += this.resolveTrailingBuffer();
       }
       const literal = this.applyScript(this.reading);
       this.resetHenkan();

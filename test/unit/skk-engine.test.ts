@@ -567,3 +567,29 @@ test('送り仮名: 使う。のように直後に句点が来ても正しく「
   t.is(engine.input('.'), '使う。'); // henkan-select中の句点で暗黙確定+句点も確定
   t.is(engine.getSubMode(), 'direct');
 });
+
+test('Hon+Spaceのように末尾が単独nの読みでも、正しく「ん」として辞書引きされる(元バグの再現ケース)', (t) => {
+  const testLookupHon = (reading: string): string[] => {
+    const dict: Record<string, string[]> = {ほん: ['本', '翻', '奔']};
+    return dict[reading] ?? [];
+  };
+  const engine = new SkkEngine(testLookupHon);
+  engine.toggleMode();
+  engine.inputUpper('h');
+  engine.input('o');
+  t.is(engine.input('n'), ''); // n単体はまだ未確定、バッファに保持される
+  t.is(engine.getDisplay(), 'ほn'); // 表示上は未変換のnのまま(preedit)
+  engine.space();
+  t.is(engine.getSubMode(), 'henkan-select');
+  t.is(engine.getDisplay(), '本'); // 「ほん」として正しく辞書引きされる
+});
+
+test('Enter確定時も同様に、末尾の単独nが正しく「ん」として解決される', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  engine.inputUpper('h');
+  engine.input('o');
+  engine.input('n');
+  const committed = engine.confirm();
+  t.is(committed, 'ほん'); // 辞書変換ではなくそのままかな確定するケースでも「ん」になる
+});
