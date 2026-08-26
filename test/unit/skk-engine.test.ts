@@ -2,6 +2,7 @@ import test from 'ava';
 
 import {preloadLargeDictionary, lookupCandidates} from '../../lib/skk/dictionary';
 import {isSkkInterceptableKey, SkkEngine} from '../../lib/skk/engine';
+import type {CandidateHistoryStore} from '../../lib/skk/engine';
 
 test('母音単体はそのまま確定する', (t) => {
   const engine = new SkkEngine();
@@ -592,4 +593,99 @@ test('Enter確定時も同様に、末尾の単独nが正しく「ん」とし�
   engine.input('n');
   const committed = engine.confirm();
   t.is(committed, 'ほん'); // 辞書変換ではなくそのままかな確定するケースでも「ん」になる
+});
+
+/**
+ * テスト用のインメモリCandidateHistoryStore。
+ * 複数のSkkEngineインスタンス間で履歴が共有される様子(再起動を跨いだ想定)を再現できる。
+ */
+function createInMemoryHistoryStore(): CandidateHistoryStore {
+  const data: Record<string, string> = {};
+  return {
+    get: (key) => data[key],
+    recordChoice: (key, candidate) => {
+      data[key] = candidate;
+    }
+  };
+}
+
+test('候補の並び替え: 初回は辞書順、確定した候補を次回は先頭に表示する(かった: 勝った/買った)', (t) => {
+  const testLookupKatta = (reading: string): string[] => {
+    const dict: Record<string, string[]> = {かった: ['勝った', '買った']};
+    return dict[reading] ?? [];
+  };
+  const history = createInMemoryHistoryStore();
+
+  // 1回目: 辞書順(勝った、買った)。2番目の「買った」を選ぶ。
+  const engine1 = new SkkEngine(testLookupKatta, history);
+  engine1.toggleMode();
+  engine1.inputUpper('k');
+  'atta'.split('').forEach((c) => engine1.input(c));
+  engine1.space();
+  t.is(engine1.getDisplay(), '勝った'); // 初回は辞書順で先頭
+  engine1.space();
+  t.is(engine1.getDisplay(), '買った');
+  t.is(engine1.confirm(), '買った');
+
+  // 2回目: 別のエンジンインスタンス(再起動を想定)でも、同じhistory storeなら「買った」が先頭になる。
+  const engine2 = new SkkEngine(testLookupKatta, history);
+  engine2.toggleMode();
+  engine2.inputUpper('k');
+  'atta'.split('').forEach((c) => engine2.input(c));
+  engine2.space();
+  t.is(engine2.getDisplay(), '買った'); // 前回確定した候補が先頭に来る
+});
+
+test('候補の並び替え: 送り仮名変換でも同様に、確定した候補が次回先頭に表示される', (t) => {
+  const testLookupKaK = (reading: string): string[] => {
+    const dict: Record<string, string[]> = {かk: ['書', '描', '欠']};
+    return dict[reading] ?? [];
+  };
+  const history = createInMemoryHistoryStore();
+
+  const engine1 = new SkkEngine(testLookupKaK, history);
+  engine1.toggleMode();
+  engine1.inputUpper('k');
+  engine1.input('a');
+  engine1.inputUpper('k');
+  engine1.input('u');
+  t.is(engine1.getDisplay(), '書く'); // 初回は辞書順
+  engine1.space();
+  t.is(engine1.getDisplay(), '描く');
+  t.is(engine1.confirm(), '描く');
+
+  const engine2 = new SkkEngine(testLookupKaK, history);
+  engine2.toggleMode();
+  engine2.inputUpper('k');
+  engine2.input('a');
+  engine2.inputUpper('k');
+  engine2.input('u');
+  t.is(engine2.getDisplay(), '描く'); // 前回確定した「描く」の語幹(描)が先頭に来る
+});
+
+test('候補の並び替え: 履歴に記憶された候補が今回の候補一覧に含まれない場合、辞書順のまま', (t) => {
+  const history = createInMemoryHistoryStore();
+  const lookupA = (reading: string): string[] => {
+    const dict: Record<string, string[]> = {てすと: ['甲', '乙']};
+    return dict[reading] ?? [];
+  };
+  const engine1 = new SkkEngine(lookupA, history);
+  engine1.toggleMode();
+  engine1.inputUpper('t');
+  'esuto'.split('').forEach((c) => engine1.input(c));
+  engine1.space();
+  engine1.space(); // 「乙」を選ぶ
+  t.is(engine1.confirm(), '乙');
+
+  // 辞書の内容が変わり「乙」が候補から消えたケースを模擬
+  const lookupB = (reading: string): string[] => {
+    const dict: Record<string, string[]> = {てすと: ['甲', '丙']};
+    return dict[reading] ?? [];
+  };
+  const engine2 = new SkkEngine(lookupB, history);
+  engine2.toggleMode();
+  engine2.inputUpper('t');
+  'esuto'.split('').forEach((c) => engine2.input(c));
+  engine2.space();
+  t.is(engine2.getDisplay(), '甲'); // 履歴の「乙」が見つからないので辞書順のまま
 });

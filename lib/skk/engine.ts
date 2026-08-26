@@ -18,6 +18,67 @@ export type KanaSubMode = 'direct' | 'henkan-reading' | 'henkan-select';
  */
 export type KanaScript = 'hiragana' | 'katakana';
 
+/**
+ * 「そのキーで最後に確定した候補」を記憶・参照するためのインターフェース。
+ * 本家SKKの仕様(初回は辞書順、次回からは最後に確定した候補を先頭に表示)に合わせた挙動を実現する。
+ * テスト時にモック実装を注入できるよう、SkkEngineのコンストラクタで差し替え可能にしている。
+ */
+export interface CandidateHistoryStore {
+  get(key: string): string | undefined;
+  recordChoice(key: string, candidate: string): void;
+}
+
+const HISTORY_STORAGE_KEY = 'skk-candidate-history-v1';
+
+/**
+ * localStorageを使った永続化実装。Electronのレンダラープロセスでは
+ * localStorageの内容が自動的にディスクへ保存され、アプリ再起動後も残る。
+ * ava等のNode.js環境(localStorage未定義)でも例外を投げず、単に永続化されないだけで
+ * 安全に動作する(getは常にundefined、recordChoiceは何もしない)。
+ */
+class LocalStorageCandidateHistoryStore implements CandidateHistoryStore {
+  private cache: Record<string, string> | null = null;
+
+  private load(): Record<string, string> {
+    // localStorageが使えない環境(ava等のNode.jsテスト環境)では、インメモリキャッシュも
+    // 一切保持しない。もしここでキャッシュだけ保持してしまうと、モジュール単位の
+    // シングルトンであるdefaultHistoryStoreを介して、無関係なテスト同士が状態を
+    // 共有してしまう(意図しない副作用)。
+    if (typeof localStorage === 'undefined') {
+      return {};
+    }
+    if (this.cache) {
+      return this.cache;
+    }
+    try {
+      const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+      this.cache = raw ? JSON.parse(raw) : {};
+    } catch {
+      this.cache = {};
+    }
+    return this.cache!;
+  }
+
+  get(key: string): string | undefined {
+    return this.load()[key];
+  }
+
+  recordChoice(key: string, candidate: string): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    const data = this.load();
+    data[key] = candidate;
+    try {
+      localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(data));
+    } catch {
+      // 保存に失敗しても(容量超過等)、動作継続を優先し無視する
+    }
+  }
+}
+
+const defaultHistoryStore = new LocalStorageCandidateHistoryStore();
+
 // バッファが指定文字数を超えても完成しない場合、無限に溜め込まないための安全弁。
 // 子音の置き換え(canContinueBuffer)導入により、通常はバッファが2文字を超える前に
 // 完成/置き換えのいずれかで解消されるため、実際にはほぼ到達しない防御的なフォールバック。
@@ -65,8 +126,14 @@ export class SkkEngine {
   private okuriConsonant: string | null = null;
   // 送り仮名として確定したかな(1モーラ分)。候補と結合して最終的な確定文字列を作る。
   private okuriKana = '';
+  // 直近の辞書引きで使ったキー(reading、または送り仮名ありならreading+okuriConsonant)。
+  // 確定時にCandidateHistoryStoreへ記録する際に使う。
+  private historyKey: string | null = null;
 
-  constructor(private readonly lookup: (reading: string) => string[] = lookupCandidates) {}
+  constructor(
+    private readonly lookup: (reading: string) => string[] = lookupCandidates,
+    private readonly historyStore: CandidateHistoryStore = defaultHistoryStore
+  ) {}
 
   getMode(): SkkMode {
     return this.mode;
@@ -117,6 +184,39 @@ export class SkkEngine {
     this.candidateIndex = 0;
     this.okuriConsonant = null;
     this.okuriKana = '';
+    this.historyKey = null;
+  }
+
+  /**
+   * 辞書引きした候補配列を、CandidateHistoryStoreに記憶された「そのキーで最後に確定した候補」が
+   * あれば先頭に並び替える。記憶がない、または候補に含まれていない場合はそのまま返す。
+   */
+  private reorderByHistory(key: string, candidates: string[]): string[] {
+    const remembered = this.historyStore.get(key);
+    if (!remembered) {
+      return candidates;
+    }
+    const index = candidates.indexOf(remembered);
+    if (index <= 0) {
+      return candidates;
+    }
+    const reordered = candidates.slice();
+    reordered.splice(index, 1);
+    reordered.unshift(remembered);
+    return reordered;
+  }
+
+  /**
+   * 確定した候補をCandidateHistoryStoreに記録する。送り仮名ありの場合、
+   * 候補には送り仮名(okuriKana)が結合済みなので、辞書引きキーと対応する形に
+   * 戻す(末尾のokuriKana分を取り除く)。
+   */
+  private recordHistoryIfNeeded(chosen: string | undefined): void {
+    if (!this.historyKey || !chosen) {
+      return;
+    }
+    const stem = this.okuriKana ? chosen.slice(0, chosen.length - this.okuriKana.length) : chosen;
+    this.historyStore.recordChoice(this.historyKey, stem);
   }
 
   /**
@@ -213,6 +313,7 @@ export class SkkEngine {
       return '';
     }
     const chosen = this.candidates[this.candidateIndex];
+    this.recordHistoryIfNeeded(chosen);
     this.resetHenkan();
     return chosen;
   }
@@ -224,7 +325,7 @@ export class SkkEngine {
    */
   private finishOkuriLookup(): string {
     const key = this.reading + (this.okuriConsonant ?? '');
-    const candidates = this.lookup(key);
+    const candidates = this.reorderByHistory(key, this.lookup(key));
     if (candidates.length === 0) {
       const literal = this.applyScript(this.reading) + this.applyScript(this.okuriKana);
       this.resetHenkan();
@@ -233,6 +334,7 @@ export class SkkEngine {
     this.candidates = candidates.map((c) => c + this.okuriKana);
     this.candidateIndex = 0;
     this.subMode = 'henkan-select';
+    this.historyKey = key;
     // okuriConsonantはここではクリアしない。キャンセル時に送り仮名ローマ字入力を
     // やり直せるよう、マーカーとして保持し続ける(resetHenkan()で最終的にクリアされる)。
     return '';
@@ -341,7 +443,7 @@ export class SkkEngine {
         // (単独の"n"は「ん」に、"sh"のような真に不完全な綴りはリテラルのまま)
         this.reading += this.resolveTrailingBuffer();
       }
-      const candidates = this.lookup(this.reading);
+      const candidates = this.reorderByHistory(this.reading, this.lookup(this.reading));
       if (candidates.length === 0) {
         const literal = this.applyScript(this.reading);
         this.resetHenkan();
@@ -350,6 +452,7 @@ export class SkkEngine {
       this.candidates = candidates;
       this.candidateIndex = 0;
       this.subMode = 'henkan-select';
+      this.historyKey = this.reading;
       return '';
     }
     if (this.subMode === 'henkan-select') {
@@ -372,6 +475,7 @@ export class SkkEngine {
     }
     if (this.subMode === 'henkan-select') {
       const chosen = this.candidates[this.candidateIndex];
+      this.recordHistoryIfNeeded(chosen);
       this.resetHenkan();
       return chosen;
     }
