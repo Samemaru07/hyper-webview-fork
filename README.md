@@ -23,6 +23,11 @@ Split a pane (`Ctrl + Shift + D`), then click a URL printed in the terminal to d
 
 Supports the config file format used by the upstream `canary` generation (distinct from the legacy `.hyper.js` format).
 
+### Custom SKK input engine
+
+A custom SKK (Simple Kana to Kanji conversion) engine, implemented from scratch without going through the system IME (fcitx5, etc.).
+Supports kana input, kanji conversion (dictionary lookup and candidate selection), katakana conversion, okurigana, and candidate history (the last-confirmed candidate for a given key is shown first next time, matching upstream SKK's own behavior).
+
 ## Tested environments
 
 -   Verified on Arch Linux (Hyprland / Wayland)
@@ -63,6 +68,20 @@ This generates a standalone binary at `dist/linux-unpacked/hyper`, directly unde
 > 🔵 Note\
 > Formal packaging (pacman, AppImage, etc.) is currently in progress.
 
+#### Linux: registering to the app launcher
+
+To launch the app like any other installed application, without running `pnpm run dev` / `pnpm run app` every time:
+
+```bash
+./build/linux/install-desktop-entry.sh
+```
+
+This generates `~/.local/share/applications/hyper-webview.desktop`, allowing you to launch it as "Hyper-webview" from launchers such as rofi or wofi.
+The script auto-detects the actual repository path, so no manual path editing is needed regardless of where the repository is cloned.
+
+> 🔵 Note\
+> Run this after `npx electron-builder --linux dir` has produced `dist/linux-unpacked/hyper`. After making source changes, re-run `pnpm run build` and `npx electron-builder --linux dir` to update the binary; step 4 above only needs to be run once.
+
 ## Usage
 
 -   Split a pane (`Ctrl + Shift + D`), then click a URL printed in the terminal to display it in a webview in the adjacent pane.
@@ -81,8 +100,9 @@ For details on each configuration option, refer to upstream's type definitions (
 
 ## Known limitations & roadmap
 
--   Investigating an fcitx5-skk issue where vowel-initial input passes through unconverted in romaji.
 -   Windows support is planned but not yet started.
+-   Tab rename feature is planned but not yet implemented.
+-   Background image configuration is planned but not yet implemented.
 
 ## License
 
