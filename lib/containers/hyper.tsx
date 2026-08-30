@@ -227,8 +227,22 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       return;
     }
 
-    // それ以外のキー(矢印キー等)はスコープ外。素通りさせつつ、宙に浮いた状態があればリセットする。
-    if (skkEngine.current.hasPendingBuffer() || subMode !== 'direct') {
+    // それ以外のキー(矢印キー・数字等)はSKKの対象外なので、通常通り素通しする。
+    // ただし、変換途中の状態(henkan-reading/henkan-select)を放置したままpreedit表示だけ消すと、
+    // PTYには何も送出されないまま画面から変換結果が消える描画バグになる。まず可能な範囲で
+    // 確定してからPTYへ送出し、その後にこのキー自体も素通しされて続けて入力される形にする。
+    if (subMode !== 'direct') {
+      const committed = skkEngine.current.confirm();
+      if (committed) {
+        erasePreeditDisplay();
+        commitToTerminal(committed);
+      } else {
+        // 送り仮名のローマ字入力中等、確定しようがない状態は破棄する
+        skkEngine.current.reset();
+        syncPreeditDisplay();
+      }
+      updateSkkIndicator();
+    } else if (skkEngine.current.hasPendingBuffer()) {
       skkEngine.current.reset();
       syncPreeditDisplay();
       updateSkkIndicator();
