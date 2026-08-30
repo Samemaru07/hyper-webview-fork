@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Hyper-webview
+Comment=Personal fork of Hyper with webview preview and custom SKK
+Exec=__REPO_ROOT__/dist/linux-unpacked/hyper
+Terminal=false
+Categories=Utility;TerminalEmulator;
+StartupWMClass=Hyper
