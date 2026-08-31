@@ -133,8 +133,9 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       return;
     }
 
-    // SKKモードのトグル(fcitx5非経由の独自バインド。既存キーマップと衝突しないctrl+jを使用)
-    if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'j') {
+    // SKKモードのトグル(fcitx5非経由の独自バインド。既存キーマップと衝突しないctrl+kを使用。
+    // ctrl+jはNeovim起動中にウィンドウ移動等で使われることが多く衝突するため避けている)
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'k') {
       const newMode = skkEngine.current.toggleMode();
       if (newMode === 'kana') {
         // SKKモードが初めてkanaに切り替わったタイミングで、大規模辞書(SKK-JISYO.L)の
