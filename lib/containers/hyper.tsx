@@ -1,5 +1,8 @@
+import {pathToFileURL} from 'url';
+
 import React, {forwardRef, useEffect, useRef, useState} from 'react';
 
+import Color from 'color';
 import Mousetrap from 'mousetrap';
 import type {MousetrapInstance} from 'mousetrap';
 import stylis from 'stylis';
@@ -328,11 +331,39 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     };
   }, []);
 
-  const {isMac: isMac_, customCSS, uiFontFamily, borderColor, maximized, fullScreen} = props;
+  const {
+    isMac: isMac_,
+    customCSS,
+    uiFontFamily,
+    borderColor,
+    maximized,
+    fullScreen,
+    backgroundColor,
+    backgroundImage,
+    backgroundImageSize
+  } = props;
   const borderWidth = isMac_ ? '' : `${maximized ? '0' : '1'}px`;
+  // Note: `pathToFileURL` expects a filesystem path, not something already a URL.
+  // Users are expected to provide an absolute local path via `backgroundImage`.
+  const backgroundImageUrl = backgroundImage ? pathToFileURL(backgroundImage).href : null;
+  // xterm.js側は`allowTransparency`が有効な間、theme.backgroundの値を一切見ずに
+  // canvasを完全透過(clearRect)にするだけなので、backgroundColorのアルファ値を
+  // 画像の濃淡として使うにはDOM側で別途黒のオーバーレイを重ねる必要がある。
+  // (xterm-addon-canvasのBaseRenderLayer#_clearAllで確認済み)
+  // アルファ値が高いほど黒みが強くなる(0.9なら90%黒で覆う)。
+  const backgroundImageOverlayAlpha = Color(backgroundColor).alpha();
   stylis.set({prefix: false});
   return (
     <div id="hyper" ref={ref}>
+      {backgroundImageUrl && (
+        <div
+          className="hyper_backgroundImage"
+          style={{
+            backgroundImage: `linear-gradient(rgba(0,0,0,${backgroundImageOverlayAlpha}), rgba(0,0,0,${backgroundImageOverlayAlpha})), url("${backgroundImageUrl}")`,
+            backgroundSize: backgroundImageSize
+          }}
+        />
+      )}
       <div
         style={{fontFamily: uiFontFamily, borderColor, borderWidth}}
         className={`hyper_main ${isMac_ && 'hyper_mainRounded'} ${fullScreen ? 'fullScreen' : ''}`}
@@ -361,6 +392,17 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
           .hyper_mainRounded {
             border-radius: 10.5px;
             overflow: hidden;
+          }
+
+          .hyper_backgroundImage {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-repeat: no-repeat;
+            background-position: center;
+            z-index: -1;
           }
 
           .skk_indicator {
@@ -400,6 +442,8 @@ const mapStateToProps = (state: HyperState) => {
     borderColor: state.ui.borderColor,
     activeSession: state.sessions.activeUid,
     backgroundColor: state.ui.backgroundColor,
+    backgroundImage: state.ui.backgroundImage,
+    backgroundImageSize: state.ui.backgroundImageSize,
     maximized: state.ui.maximized,
     fullScreen: state.ui.fullScreen,
     lastConfigUpdate: state.ui._lastUpdate

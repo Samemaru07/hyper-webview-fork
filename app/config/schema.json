@@ -31,6 +31,19 @@
                     "description": "terminal background color\n\nopacity is only supported on macOS",
                     "type": "string"
                 },
+                "backgroundImage": {
+                    "description": "absolute path to a local image file to use as the terminal background\n\nleave empty (default) to disable",
+                    "type": "string"
+                },
+                "backgroundImageSize": {
+                    "description": "CSS `background-size` keyword used to render `backgroundImage`",
+                    "enum": [
+                        "auto",
+                        "contain",
+                        "cover"
+                    ],
+                    "type": "string"
+                },
                 "bell": {
                     "description": "Supported Options:\n1. 'SOUND' -> Enables the bell as a sound\n2. false: turns off the bell",
                     "enum": [
@@ -358,6 +371,19 @@
                             "description": "terminal background color\n\nopacity is only supported on macOS",
                             "type": "string"
                         },
+                        "backgroundImage": {
+                            "description": "absolute path to a local image file to use as the terminal background\n\nleave empty (default) to disable",
+                            "type": "string"
+                        },
+                        "backgroundImageSize": {
+                            "description": "CSS `background-size` keyword used to render `backgroundImage`",
+                            "enum": [
+                                "auto",
+                                "contain",
+                                "cover"
+                            ],
+                            "type": "string"
+                        },
                         "bell": {
                             "description": "Supported Options:\n1. 'SOUND' -> Enables the bell as a sound\n2. false: turns off the bell",
                             "enum": [
@@ -640,6 +666,8 @@
                     },
                     "required": [
                         "backgroundColor",
+                        "backgroundImage",
+                        "backgroundImageSize",
                         "bell",
                         "bellSound",
                         "bellSoundURL",

@@ -50,9 +50,12 @@ const isWebgl2Supported = (() => {
 })();
 
 const getTermOptions = (props: TermProps): ITerminalOptions => {
-  // Set a background color only if it is opaque
+  // アルファ値付きのbackgroundColorが指定されている場合、そのアルファ値を
+  // そのままcanvasの背景塗りつぶしに使う（例: rgba(0,0,0,0.5)なら50%の黒みを
+  // 背景画像の上に重ねる）。以前は問答無用でrgba(0,0,0,0)＝完全透過にしていたが、
+  // それだと指定したアルファ値が見た目に反映されず、濃淡の調整ができなかった。
   const needTransparency = Color(props.backgroundColor).alpha() < 1;
-  const backgroundColor = needTransparency ? 'rgba(0,0,0,0)' : props.backgroundColor;
+  const backgroundColor = props.backgroundColor;
 
   return {
     macOptionIsMeta: props.modifierKeys.altIsMeta,
@@ -550,6 +553,10 @@ export default class Term extends React.PureComponent<
 
   render() {
     const showWebview = !!this.props.url;
+    // xterm.js自体のtheme.backgroundは透過設定できるが、xterm.css側が
+    // .xterm-viewportに`background-color: #000`を直書きしているため、
+    // それとは別にDOM側のviewport背景も透過させる必要がある。
+    const isTransparentBackground = Color(this.props.backgroundColor).alpha() < 1;
     return (
       <div className={`term_fit ${this.props.isTermActive ? 'term_active' : ''}`} onMouseUp={this.onMouseUp}>
         {this.props.customChildrenBefore}
@@ -557,7 +564,7 @@ export default class Term extends React.PureComponent<
         {/* xterm用のコンテナは常にマウントし続ける。webview表示中はCSSで隠すだけ */}
         <div
           ref={this.onTermWrapperRef}
-          className="term_fit term_wrapper"
+          className={`term_fit term_wrapper ${isTransparentBackground ? 'term_wrapperTransparent' : ''}`}
           style={showWebview ? {display: 'none'} : undefined}
         />
 
@@ -646,6 +653,9 @@ export default class Term extends React.PureComponent<
           }
           .term_wrapper {
             overflow: hidden;
+          }
+          .term_wrapperTransparent .xterm-viewport {
+            background-color: transparent !important;
           }
         `}</style>
       </div>

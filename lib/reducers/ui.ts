@@ -91,6 +91,8 @@ const initial: uiState = Immutable<Mutable<uiState>>({
   fullScreen: false,
   foregroundColor: '#fff',
   backgroundColor: '#000',
+  backgroundImage: '',
+  backgroundImageSize: 'cover',
   maximized: false,
   updateVersion: null,
   updateNotes: null,
@@ -208,6 +210,14 @@ const reducer: IUiReducer = (state = initial, action) => {
 
             if (config.backgroundColor) {
               ret.backgroundColor = config.backgroundColor;
+            }
+
+            if (config.backgroundImage || config.backgroundImage === '') {
+              ret.backgroundImage = config.backgroundImage;
+            }
+
+            if (config.backgroundImageSize) {
+              ret.backgroundImageSize = config.backgroundImageSize;
             }
 
             if (config.css || config.css === '') {
