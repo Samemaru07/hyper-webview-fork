@@ -42,6 +42,14 @@ type profileConfigOptions = {
    */
   backgroundColor: string;
   /**
+   * absolute path to a local image file to use as the terminal background
+   *
+   * leave empty (default) to disable
+   */
+  backgroundImage: string;
+  /** CSS `background-size` keyword used to render `backgroundImage` */
+  backgroundImageSize: 'cover' | 'contain' | 'auto';
+  /**
    * Supported Options:
    * 1. 'SOUND' -> Enables the bell as a sound
    * 2. false: turns off the bell

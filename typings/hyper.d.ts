@@ -49,6 +49,8 @@ export type uiState = Immutable<{
   activeUid: string | null;
   activityMarkers: Record<string, boolean>;
   backgroundColor: string;
+  backgroundImage: string;
+  backgroundImageSize: 'cover' | 'contain' | 'auto';
   bell: 'SOUND' | false;
   bellSoundURL: string | null;
   bellSound: string | null;
