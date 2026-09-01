@@ -28,6 +28,23 @@
 システムのIME(fcitx5等)を一切介さず、ゼロから実装した独自のSKK(Simple Kana to Kanji conversion)エンジン。
 かな入力、漢字変換(辞書引き・候補選択)、カタカナ変換、送り仮名、候補の履歴(そのキーで最後に確定した候補を次回優先表示する、本家SKKの仕様通りの挙動)に対応。
 
+### 背景画像
+
+`hyper.json` からターミナルの背景に画像を指定できます。他の設定項目とは異なり、`backgroundImage` / `backgroundImageSize` は本家Hyperには存在しない、このフォーク独自の拡張項目です。
+
+```json
+"backgroundColor": "rgba(0,0,0,0.8)",
+"backgroundImage": "/絶対パス/画像.png",
+"backgroundImageSize": "cover"
+```
+
+-   `backgroundImage`: ローカル画像ファイルの絶対パス。空文字(デフォルト)の場合は無効
+-   `backgroundImageSize`: CSSの`background-size`に相当するキーワード。`cover` / `contain` / `auto`のいずれか
+-   `backgroundColor`のアルファ値(例: `0.8`)が、画像にどれだけ黒を重ねるかを決めます。`1`に近いほど暗く、`0`に近いほど画像がそのまま明るく表示されます。ちょうど`1`にすると画像は表示されなくなります(完全不透明のターミナルに戻る)
+
+> 🔵 Note\
+> `decorateConfig`で`backgroundColor`を上書きするタイプのプラグイン(`hyper-iceberg`等)とは併用できません。画像表示に必要なアルファ値が上書きされてしまうためです。
+
 ## 動作環境
 
 -   Arch Linux (hyprland / wayland) で動作確認済み
@@ -98,11 +115,13 @@ npx electron-builder --linux dir
 
 各設定項目の詳細は、フォーク元の型定義([`typings/config.d.ts`](https://github.com/vercel/hyper/blob/canary/typings/config.d.ts))を参照してください。
 
+> 🔵 Note\
+> `backgroundImage` / `backgroundImageSize` はこのフォーク独自の拡張項目で、上記の本家型定義には含まれていません。詳細は[背景画像](#背景画像)を参照してください。
+
 ## 既知の制限・今後の予定
 
 -   Windows対応は対応予定 (現時点では未着手)
 -   タブリネーム機能は対応予定 (現時点では未実装)
--   背景画像の指定機能は対応予定 (現時点では未実装)
 
 ## ライセンス
 

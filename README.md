@@ -28,6 +28,23 @@ Supports the config file format used by the upstream `canary` generation (distin
 A custom SKK (Simple Kana to Kanji conversion) engine, implemented from scratch without going through the system IME (fcitx5, etc.).
 Supports kana input, kanji conversion (dictionary lookup and candidate selection), katakana conversion, okurigana, and candidate history (the last-confirmed candidate for a given key is shown first next time, matching upstream SKK's own behavior).
 
+### Background image
+
+Set a background image for the terminal via `hyper.json`. Unlike most other config options, `backgroundImage` and `backgroundImageSize` are extensions specific to this fork and are not present in upstream Hyper.
+
+```json
+"backgroundColor": "rgba(0,0,0,0.8)",
+"backgroundImage": "/absolute/path/to/image.png",
+"backgroundImageSize": "cover"
+```
+
+-   `backgroundImage`: absolute path to a local image file. Leave empty (default) to disable.
+-   `backgroundImageSize`: CSS `background-size` keyword. One of `cover` / `contain` / `auto`.
+-   The alpha value of `backgroundColor` (e.g. `0.8`) controls how much black is layered over the image; closer to `1` is darker, closer to `0` shows the image more brightly. A value of exactly `1` disables the image display entirely (fully opaque terminal).
+
+> 🔵 Note\
+> Plugins that override `backgroundColor` via `decorateConfig` (e.g. `hyper-iceberg`) are not compatible with this feature, since they overwrite the alpha value needed to show the image.
+
 ## Tested environments
 
 -   Verified on Arch Linux (Hyprland / Wayland)
@@ -98,11 +115,13 @@ Run `Tools` → `Update plugins` (`Ctrl + Shift + U`) from the menu.
 
 For details on each configuration option, refer to upstream's type definitions ([`typings/config.d.ts`](https://github.com/vercel/hyper/blob/canary/typings/config.d.ts)).
 
+> 🔵 Note\
+> `backgroundImage` and `backgroundImageSize` are extensions added by this fork and are not part of upstream's type definitions linked above. See [Background image](#background-image) for details.
+
 ## Known limitations & roadmap
 
 -   Windows support is planned but not yet started.
 -   Tab rename feature is planned but not yet implemented.
--   Background image configuration is planned but not yet implemented.
 
 ## License
 
