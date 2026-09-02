@@ -49,11 +49,29 @@
 
 -   Arch Linux (hyprland / wayland) で動作確認済み
 -   WSL (Ubuntu) でも動作確認
+-   Windows 11 ネイティブ (WSLを介さない) でも開発ビルドまで動作確認済み。配布用インストーラーの生成は今後対応
 
 ## セットアップ
 
 ```bash
 pnpm install
+```
+
+#### Windows: `pnpm install` が `rebuild-node-pty` でハングする場合
+
+`postinstall` 内の `electron-rebuild -f -o node-pty -m target` が、`node-gyp` 自体のconfigureは通過しているにもかかわらず、ビルド開始直前で無応答のまま進まなくなることがあります(原因未特定)。以下の手順で手動で続行できます。
+
+```powershell
+# ハングしている pnpm install はCtrl+Cで中断
+
+cd target\node_modules\node-pty
+npx node-gyp rebuild --runtime=electron --target=22.3.25 --arch=x64 --dist-url=https://www.electronjs.org/headers --build-from-source
+cd ..\..\..
+
+# postinstallの残りの工程を手動で実行
+pnpm exec cpy --cwd=target node_modules "../../app/"
+pnpm exec husky install
+pnpm run generate-schema
 ```
 
 ### 開発時
@@ -120,7 +138,7 @@ npx electron-builder --linux dir
 
 ## 既知の制限・今後の予定
 
--   Windows対応は対応予定 (現時点では未着手)
+-   Windows対応は開発ビルドまで動作確認済み。配布用インストーラー(NSIS)の生成は未対応
 -   タブリネーム機能は対応予定 (現時点では未実装)
 
 ## ライセンス
