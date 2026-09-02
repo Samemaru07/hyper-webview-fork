@@ -49,11 +49,29 @@ Set a background image for the terminal via `hyper.json`. Unlike most other conf
 
 -   Verified on Arch Linux (Hyprland / Wayland)
 -   Also verified on WSL (Ubuntu)
+-   Also verified natively on Windows 11 (without WSL) up through development builds. Producing a distributable installer is not yet supported.
 
 ## Setup
 
 ```bash
 pnpm install
+```
+
+#### Windows: if `pnpm install` hangs at `rebuild-node-pty`
+
+`electron-rebuild -f -o node-pty -m target`, run as part of `postinstall`, can become unresponsive right before starting the build, even though `node-gyp`'s own configure step completes successfully (root cause not yet identified). You can continue manually as follows.
+
+```powershell
+# Interrupt the hanging pnpm install with Ctrl+C
+
+cd target\node_modules\node-pty
+npx node-gyp rebuild --runtime=electron --target=22.3.25 --arch=x64 --dist-url=https://www.electronjs.org/headers --build-from-source
+cd ..\..\..
+
+# Run the remaining postinstall steps manually
+pnpm exec cpy --cwd=target node_modules "../../app/"
+pnpm exec husky install
+pnpm run generate-schema
 ```
 
 ### Development
@@ -120,7 +138,7 @@ For details on each configuration option, refer to upstream's type definitions (
 
 ## Known limitations & roadmap
 
--   Windows support is planned but not yet started.
+-   Windows support is verified up through development builds. Producing a distributable installer (NSIS) is not yet supported.
 -   Tab rename feature is planned but not yet implemented.
 
 ## License
