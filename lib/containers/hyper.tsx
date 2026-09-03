@@ -158,6 +158,16 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     // SKKモードのトグル(fcitx5非経由の独自バインド。既存キーマップと衝突しないctrl+kを使用。
     // ctrl+jはNeovim起動中にウィンドウ移動等で使われることが多く衝突するため避けている)
     if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'k') {
+      // 変換中(▽読み入力・▼候補選択)の内容を持ったままモードを切り替えると、
+      // toggleMode内部のresetHenkanで無言のまま破棄されてしまう。Enterキーと同じ
+      // confirm()を先に呼び、変換中の内容があれば確定させてから切り替える。
+      if (skkEngine.current.getSubMode() !== 'direct') {
+        const committed = skkEngine.current.confirm();
+        if (committed) {
+          erasePreeditDisplay();
+          commitToTerminal(committed);
+        }
+      }
       const newMode = skkEngine.current.toggleMode();
       if (newMode === 'kana') {
         // SKKモードが初めてkanaに切り替わったタイミングで、大規模辞書(SKK-JISYO.L)の

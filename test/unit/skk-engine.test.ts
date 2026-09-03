@@ -89,6 +89,25 @@ test('母音の後の長音符は正しく結合される(例: aー)', (t) => {
   t.is(engine.input('-'), 'ー');
 });
 
+test('[は全角の「に変換される', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('['), '「');
+});
+
+test(']は全角の」に変換される', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input(']'), '」');
+});
+
+test('未確定バッファがある状態で[が来ると、バッファをリテラル確定してから「が続く', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('x'), ''); // xは単体では変換が成立せず、未確定バッファに残る
+  t.is(engine.input('['), 'x「');
+});
+
 test('未確定バッファがある状態で句読点が来た場合、バッファをリテラル確定してから句読点を独立して変換する', (t) => {
   const engine = new SkkEngine();
   engine.toggleMode();
@@ -98,12 +117,14 @@ test('未確定バッファがある状態で句読点が来た場合、バッ�
   t.false(engine.hasPendingBuffer());
 });
 
-test('isSkkInterceptableKeyはアルファベット・句読点・長音符のみtrueを返す', (t) => {
+test('isSkkInterceptableKeyはアルファベット・句読点・長音符・カッコのみtrueを返す', (t) => {
   t.true(isSkkInterceptableKey('a'));
   t.true(isSkkInterceptableKey('Z'));
   t.true(isSkkInterceptableKey(','));
   t.true(isSkkInterceptableKey('.'));
   t.true(isSkkInterceptableKey('-'));
+  t.true(isSkkInterceptableKey('['));
+  t.true(isSkkInterceptableKey(']'));
   t.false(isSkkInterceptableKey('1'));
   t.false(isSkkInterceptableKey(' '));
   t.false(isSkkInterceptableKey('Enter'));
