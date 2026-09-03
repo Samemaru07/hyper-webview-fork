@@ -21,6 +21,7 @@
   ],
   "artifactName": "${productName}-${version}-${arch}.${ext}",
   "linux": {
+    "executableName": "hyper",
     "category": "TerminalEmulator",
     "target": [
       "deb",
