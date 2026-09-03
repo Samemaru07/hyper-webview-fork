@@ -71,6 +71,10 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
    * 描画は次のキー入力まで持ち越す。
    */
   const erasePreeditDisplay = () => {
+    if (isAlternateScreenActive()) {
+      preeditWidth.current = 0;
+      return;
+    }
     const term = terms.current?.getActiveTerm()?.term;
     if (term && preeditWidth.current > 0) {
       term.write('\b \b'.repeat(preeditWidth.current));
