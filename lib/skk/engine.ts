@@ -89,6 +89,13 @@ const MAX_PENDING_BUFFER_LENGTH = 4;
 // 句読点/長音符を独立して変換する。
 const PUNCTUATION_CHARS = new Set([',', '.', '-']);
 
+// 全角カッコ。本家SKKの慣習にならい、"["→「、"]"→」に固定変換する
+// (wanakanaのローマ字→かな変換表には含まれないキーのため、専用のマップで扱う)。
+const BRACKET_CHARS: Record<string, string> = {
+  '[': '「',
+  ']': '」'
+};
+
 const VOWELS = new Set(['a', 'i', 'u', 'e', 'o']);
 
 /**
@@ -97,7 +104,7 @@ const VOWELS = new Set(['a', 'i', 'u', 'e', 'o']);
  * 大文字・小文字どちらも対象(大文字は▽漢字変換モードの開始トリガーになるため)。
  */
 export function isSkkInterceptableKey(key: string): boolean {
-  return /^[a-zA-Z]$/.test(key) || PUNCTUATION_CHARS.has(key);
+  return /^[a-zA-Z]$/.test(key) || PUNCTUATION_CHARS.has(key) || key in BRACKET_CHARS;
 }
 
 /**
@@ -266,6 +273,12 @@ export class SkkEngine {
    * 常にひらがなで返す(辞書の見出し語キーとして使うため、scriptの影響を受けない)。
    */
   private convertRawChar(char: string): string {
+    if (char in BRACKET_CHARS) {
+      const pendingLiteral = this.buffer;
+      this.buffer = '';
+      return pendingLiteral + BRACKET_CHARS[char];
+    }
+
     if (PUNCTUATION_CHARS.has(char) && this.buffer.length > 0) {
       const pendingLiteral = this.buffer;
       this.buffer = '';
