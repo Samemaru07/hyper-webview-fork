@@ -49,7 +49,7 @@ Set a background image for the terminal via `hyper.json`. Unlike most other conf
 
 -   Verified on Arch Linux (Hyprland / Wayland)
 -   Also verified on WSL (Ubuntu)
--   Also verified natively on Windows 11 (without WSL) up through development builds. Producing a distributable installer is not yet supported.
+-   Also verified natively on Windows 11 (without WSL), for both development builds and generating a distributable installer (NSIS).
 
 ## Setup
 
@@ -138,7 +138,6 @@ For details on each configuration option, refer to upstream's type definitions (
 
 ## Known limitations & roadmap
 
--   Windows support is verified up through development builds. Producing a distributable installer (NSIS) is not yet supported.
 -   Tab rename feature is planned but not yet implemented.
 
 ## License
