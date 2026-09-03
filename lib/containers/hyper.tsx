@@ -71,11 +71,27 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
    * 描画は次のキー入力まで持ち越す。
    */
   const erasePreeditDisplay = () => {
+    if (isAlternateScreenActive()) {
+      preeditWidth.current = 0;
+      return;
+    }
     const term = terms.current?.getActiveTerm()?.term;
     if (term && preeditWidth.current > 0) {
       term.write('\b \b'.repeat(preeditWidth.current));
     }
     preeditWidth.current = 0;
+  };
+
+  /**
+   * lazygit等、alternate screen bufferを使うフルスクリーンTUIアプリが現在アクティブかどうか。
+   * これらのアプリは画面全体を非同期・絶対座標で再描画するため、ローカルpreedit描画
+   * (相対カーソル移動によるバックスペース消去)と競合し、既に描画済みの内容を破壊して
+   * しまう(文字の上書き・穴あき)。syncPreeditDisplayで、この間はpreeditのローカル表示
+   * 自体を止めるために使う。
+   */
+  const isAlternateScreenActive = (): boolean => {
+    const term = terms.current?.getActiveTerm()?.term;
+    return term?.buffer.active.type === 'alternate';
   };
 
   /**
@@ -86,6 +102,9 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
    */
   const syncPreeditDisplay = () => {
     erasePreeditDisplay();
+    if (isAlternateScreenActive()) {
+      return;
+    }
     const term = terms.current?.getActiveTerm()?.term;
     if (!term) {
       return;
