@@ -115,6 +115,40 @@ test('z/は全角の・に変換される', (t) => {
   t.is(engine.input('/'), '・');
 });
 
+test('z.は全角の…に変換される', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('z'), '');
+  t.is(engine.input('.'), '…');
+});
+
+test('z,は全角の‥に変換される', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('z'), '');
+  t.is(engine.input(','), '‥');
+});
+
+test('zh/zj/zk/zlは矢印記号に変換される', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('z'), '');
+  t.is(engine.input('h'), '←');
+  t.is(engine.input('z'), '');
+  t.is(engine.input('j'), '↓');
+  t.is(engine.input('z'), '');
+  t.is(engine.input('k'), '↑');
+  t.is(engine.input('z'), '');
+  t.is(engine.input('l'), '→');
+});
+
+test('zの直後でなければh/j/k/lは通常のかな入力として扱われる', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('h'), '');
+  t.is(engine.input('a'), 'は');
+});
+
 test('canHandleSymbolShortcutは、未確定バッファがzのときのみ/に対してtrueを返す', (t) => {
   const engine = new SkkEngine();
   engine.toggleMode();
