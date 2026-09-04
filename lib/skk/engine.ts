@@ -96,6 +96,15 @@ const BRACKET_CHARS: Record<string, string> = {
   ']': '」'
 };
 
+// 本家SKKの"z"始まりの記号ショートカット。未確定バッファが"z"単体のときにこれらの
+// キーが続くと、対応する記号に変換される("/"は通常のシェル操作(パス区切り等)でも
+// 頻出するキーのため、常時インターセプトはせず、"z"の直後という条件付きでのみ扱う。
+// isEngineが持つ現在のbuffer状態を見る必要があるため、静的なisSkkInterceptableKeyとは
+// 別に、SkkEngine#canHandleSymbolShortcutで判定する)。
+const Z_SYMBOL_SHORTCUTS: Record<string, string> = {
+  '/': '・'
+};
+
 const VOWELS = new Set(['a', 'i', 'u', 'e', 'o']);
 
 /**
@@ -164,6 +173,15 @@ export class SkkEngine {
 
   hasPendingBuffer(): boolean {
     return this.buffer.length > 0;
+  }
+
+  /**
+   * "z"始まりの記号ショートカット(例: "z/"→「・」)を、今このキーで発動できるかどうか。
+   * 呼び出し側(hyper.tsx)で、通常は素通しさせたいキー("/"等)を、"z"の直後という
+   * 条件付きでのみインターセプト対象に切り替えるために使う。
+   */
+  canHandleSymbolShortcut(key: string): boolean {
+    return this.buffer === 'z' && key in Z_SYMBOL_SHORTCUTS;
   }
 
   /**
@@ -273,6 +291,11 @@ export class SkkEngine {
    * 常にひらがなで返す(辞書の見出し語キーとして使うため、scriptの影響を受けない)。
    */
   private convertRawChar(char: string): string {
+    if (this.buffer === 'z' && char in Z_SYMBOL_SHORTCUTS) {
+      this.buffer = '';
+      return Z_SYMBOL_SHORTCUTS[char];
+    }
+
     if (char in BRACKET_CHARS) {
       const pendingLiteral = this.buffer;
       this.buffer = '';

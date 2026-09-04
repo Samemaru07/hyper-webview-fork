@@ -108,6 +108,22 @@ test('未確定バッファがある状態で[が来ると、バッファをリ�
   t.is(engine.input('['), 'x「');
 });
 
+test('z/は全角の・に変換される', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.is(engine.input('z'), '');
+  t.is(engine.input('/'), '・');
+});
+
+test('canHandleSymbolShortcutは、未確定バッファがzのときのみ/に対してtrueを返す', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  t.false(engine.canHandleSymbolShortcut('/')); // 直前にzが無ければfalse
+  engine.input('z');
+  t.true(engine.canHandleSymbolShortcut('/'));
+  t.false(engine.canHandleSymbolShortcut('a')); // /以外はfalse
+});
+
 test('未確定バッファがある状態で句読点が来た場合、バッファをリテラル確定してから句読点を独立して変換する', (t) => {
   const engine = new SkkEngine();
   engine.toggleMode();
