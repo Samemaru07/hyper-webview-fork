@@ -102,7 +102,13 @@ const BRACKET_CHARS: Record<string, string> = {
 // isEngineが持つ現在のbuffer状態を見る必要があるため、静的なisSkkInterceptableKeyとは
 // 別に、SkkEngine#canHandleSymbolShortcutで判定する)。
 const Z_SYMBOL_SHORTCUTS: Record<string, string> = {
-  '/': '・'
+  '/': '・',
+  '.': '…',
+  ',': '‥',
+  h: '←',
+  j: '↓',
+  k: '↑',
+  l: '→'
 };
 
 const VOWELS = new Set(['a', 'i', 'u', 'e', 'o']);
