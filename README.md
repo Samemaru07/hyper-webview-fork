@@ -165,6 +165,7 @@ For details on each configuration option, refer to upstream's type definitions (
 
 ## Known limitations & roadmap
 
+-   The custom SKK engine's in-progress kanji conversion display can render incorrectly when it wraps at the right edge of the terminal (under investigation).
 -   Tab rename feature is planned but not yet implemented.
 
 ## License
