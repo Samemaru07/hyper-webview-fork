@@ -117,6 +117,33 @@ The script auto-detects the actual repository path, so no manual path editing is
 > 🔵 Note\
 > Run this after `npx electron-builder --linux dir` has produced `dist/linux-unpacked/hyper`. After making source changes, re-run `pnpm run build` and `npx electron-builder --linux dir` to update the binary; step 4 above only needs to be run once.
 
+## Updating
+
+To pull in the latest commits on `main`:
+
+```bash
+git checkout main
+git pull
+pnpm install
+```
+
+Then, depending on how you normally run the app:
+
+-   **Development mode** (`pnpm run dev` + `pnpm run app`): the steps above are enough; just restart `pnpm run dev`.
+-   **Linux, registered to the app launcher**:
+    ```bash
+    pnpm run build
+    npx electron-builder --linux dir
+    ```
+-   **Windows, installed via the `.exe`**:
+    ```bash
+    pnpm run dist
+    ```
+    Then run the newly generated `.exe` under `dist\` again (it overwrites the existing install).
+
+> 🔵 Note\
+> If `pnpm install` gets stuck rebuilding `node-pty`, see [Windows: if `pnpm install` hangs at `rebuild-node-pty`](#windows-if-pnpm-install-hangs-at-rebuild-node-pty) above.
+
 ## Usage
 
 -   Split a pane (`Ctrl + Shift + D`), then click a URL printed in the terminal to display it in a webview in the adjacent pane.

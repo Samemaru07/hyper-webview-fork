@@ -117,6 +117,33 @@ npx electron-builder --linux dir
 > 🔵 Note\
 > `npx electron-builder --linux dir` で `dist/linux-unpacked/hyper` が生成された後に実行してください。ソースコードに変更を加えた場合は `pnpm run build` と `npx electron-builder --linux dir` を再実行すればバイナリに反映されます(上記の登録手順自体は初回のみで問題ありません)。
 
+## アップデート方法
+
+`main`ブランチの最新コミットを取り込むには、以下を実行してください。
+
+```bash
+git checkout main
+git pull
+pnpm install
+```
+
+そのあと、普段の起動方法にあわせて以下を実行してください。
+
+-   **開発モード**(`pnpm run dev` + `pnpm run app`)で使っている場合: 上記だけで反映されます。`pnpm run dev`を再起動してください。
+-   **Linuxランチャー登録済み**の場合:
+    ```bash
+    pnpm run build
+    npx electron-builder --linux dir
+    ```
+-   **Windowsのインストーラー(`.exe`)で使っている場合**:
+    ```bash
+    pnpm run dist
+    ```
+    生成された`dist\`配下の新しい`.exe`を再度インストールしてください(既存のインストール先に上書きされます)。
+
+> 🔵 Note\
+> `pnpm install`実行時、`node-pty`のネイティブビルドで問題が起きる場合は、上記セットアップの「[Windows: `pnpm install` が `rebuild-node-pty` でハングする場合](#windows-pnpm-install-が-rebuild-node-pty-でハングする場合)」を参照してください。
+
 ## 使い方
 
 -   ペインを分割し (`Ctrl + Shift + D`) 、ターミナルに出力されたurlをクリックすると、隣のペインにwebviewで表示されます。
