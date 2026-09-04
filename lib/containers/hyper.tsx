@@ -228,9 +228,16 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       return;
     }
 
-    // 修飾キーなしの、かな入力対象キー(アルファベット・句読点・長音符)のみを対象とする。
+    // 修飾キーなしの、かな入力対象キー(アルファベット・句読点・長音符・カッコ)のみを対象とする。
     // 大文字は▽漢字変換モードの開始(direct中)、または読みへの追加(henkan-reading中)として扱う。
-    if (!e.ctrlKey && !e.altKey && !e.metaKey && isSkkInterceptableKey(e.key)) {
+    // "/"等、通常は素通しさせたいキーは、canHandleSymbolShortcutで"z"の直後という条件付きで
+    // インターセプト対象に加える(例: "z/"→「・」。パス指定等での通常の"/"入力は妨げない)。
+    if (
+      !e.ctrlKey &&
+      !e.altKey &&
+      !e.metaKey &&
+      (isSkkInterceptableKey(e.key) || skkEngine.current.canHandleSymbolShortcut(e.key))
+    ) {
       const isUpper = e.key.length === 1 && e.key !== e.key.toLowerCase();
       const committed = isUpper
         ? skkEngine.current.inputUpper(e.key.toLowerCase())
