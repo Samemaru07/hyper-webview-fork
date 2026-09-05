@@ -197,7 +197,8 @@ const testLookup = (reading: string): string[] => {
   const dict: Record<string, string[]> = {
     かんじ: ['漢字', '幹事'],
     わたし: ['私'],
-    かk: ['書', '描']
+    かk: ['書', '描'],
+    かんs: ['関']
   };
   return dict[reading] ?? [];
 };
@@ -530,6 +531,25 @@ test('送り仮名: KaKuと入力すると「かk」で辞書引きされ「書�
   t.is(engine.getSubMode(), 'direct');
 });
 
+test('送り仮名: KanSuruと入力すると、単独の"n"が読みに含まれ「関する」に変換できる(回帰テスト)', (t) => {
+  const engine = new SkkEngine(testLookup);
+  engine.toggleMode();
+  engine.inputUpper('k'); // K
+  t.is(engine.input('a'), ''); // a → reading="か"
+  t.is(engine.input('n'), ''); // n → 単独では未確定のままバッファに保持される
+  t.is(engine.getDisplay(), 'かn'); // 読み"か" + 未確定バッファ"n"のプレビュー(まだ送り仮名マーカーなし)
+  engine.inputUpper('s'); // 2箇所目の大文字S → 送り仮名マーカー開始。
+  // ここでバッファの"n"が読みへ確定され、reading="かん"になっている必要がある
+  // (この確定が抜けると、"n"が送り仮名側に紛れ込み「貸す」等の誤変換になる)。
+  t.is(engine.getDisplay(), 'かん*s');
+  t.is(engine.input('u'), ''); // u → "su"→「す」が完成、辞書引きキーは"かんs"
+  t.is(engine.getSubMode(), 'henkan-select');
+  t.is(engine.getDisplay(), '関す');
+  t.is(engine.input('r'), '関す'); // henkan-select中の入力で暗黙確定 + "r"はバッファに保持
+  t.is(engine.input('u'), 'る'); // "ru"→「る」
+  t.is(engine.getSubMode(), 'direct');
+});
+
 test('送り仮名: henkan-select中はSpaceで他の候補(描く)にも送れる', (t) => {
   const engine = new SkkEngine(testLookup);
   engine.toggleMode();
@@ -602,6 +622,20 @@ test('送り仮名: 実際の辞書データを使い、KaKuが書くに変換�
   t.is(engine.getSubMode(), 'henkan-select');
   t.is(engine.getDisplay(), '書く');
   t.is(engine.confirm(), '書く');
+});
+
+test('送り仮名: 実際の辞書データを使い、KanSuruが関するに変換できる(モック辞書ではなく本番辞書での回帰テスト)', (t) => {
+  const engine = new SkkEngine();
+  engine.toggleMode();
+  engine.inputUpper('k');
+  engine.input('a');
+  engine.input('n');
+  engine.inputUpper('s');
+  t.is(engine.input('u'), '');
+  t.is(engine.getSubMode(), 'henkan-select');
+  t.is(engine.getDisplay(), '関す');
+  t.is(engine.input('r'), '関す');
+  t.is(engine.input('u'), 'る');
 });
 
 test('送り仮名: 送り仮名マーカーの文字自体でモーラが完成する場合(母音1文字)、即座に辞書引きされる(使う)', (t) => {

@@ -453,6 +453,14 @@ export class SkkEngine {
       // 「使う」のように送り仮名が母音1文字(う)から始まる場合、この1文字だけで
       // 既にモーラが完成するため、即座に辞書引きへ進む必要がある
       // (単に「未確定として次の文字を待つ」と決め打ちしない)。
+      //
+      // マーカー処理に入る前に、読み側の未確定バッファ(例: 「KanSuru」の"n"のような
+      // 単独の"n")を先に読みへ確定させておく必要がある。これをしないと、単独の"n"が
+      // 送り仮名側のバッファに紛れ込み、読みが1文字短いまま辞書引きされてしまう
+      // (「かんs」であるべきキーが「かs」になる、といった形で変換結果が壊れる)。
+      if (this.buffer) {
+        this.reading += this.resolveTrailingBuffer();
+      }
       this.okuriConsonant = char;
       const kana = this.convertRawChar(char);
       if (kana) {
