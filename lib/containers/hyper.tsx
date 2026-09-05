@@ -77,7 +77,11 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     }
     const term = terms.current?.getActiveTerm()?.term;
     if (term && preeditWidth.current > 0) {
-      term.write('\b \b'.repeat(preeditWidth.current));
+      // 保存済みカーソル位置(syncPreeditDisplayでのDECSC)へ復帰 → 空白で上書き消去 →
+      // 再度同じ位置へ復帰。\bによる相対移動は行末のpending wrap状態でズレるため使わない。
+      // JS側でcursorX/Yを読み取らないのは、term.write()が非同期処理されるため、書き込み
+      // 直後に読むと処理前の古い値を掴む可能性があるため(実際にこれが原因で描画が乱れた)。
+      term.write('\x1b8' + ' '.repeat(preeditWidth.current) + '\x1b8');
     }
     preeditWidth.current = 0;
   };
@@ -111,7 +115,9 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     }
     const nextDisplay = skkEngine.current.getDisplay();
     if (nextDisplay) {
-      term.write(nextDisplay);
+      // 描画開始位置をDECSCで保存してから書き込む。確定・キャンセルでpreeditWidthが
+      // 0に戻るまで、この保存位置がerasePreeditDisplayでの復帰先になる。
+      term.write('\x1b7' + nextDisplay);
     }
     preeditWidth.current = displayWidth(nextDisplay);
   };
