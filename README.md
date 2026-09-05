@@ -57,23 +57,6 @@ Set a background image for the terminal via `hyper.json`. Unlike most other conf
 pnpm install
 ```
 
-#### Windows: if `pnpm install` hangs at `rebuild-node-pty`
-
-`electron-rebuild -f -o node-pty -m target`, run as part of `postinstall`, can become unresponsive right before starting the build, even though `node-gyp`'s own configure step completes successfully (root cause not yet identified). You can continue manually as follows.
-
-```powershell
-# Interrupt the hanging pnpm install with Ctrl+C
-
-cd target\node_modules\node-pty
-npx node-gyp rebuild --runtime=electron --target=22.3.25 --arch=x64 --dist-url=https://www.electronjs.org/headers --build-from-source
-cd ..\..\..
-
-# Run the remaining postinstall steps manually
-pnpm exec cpy --cwd=target node_modules "../../app/"
-pnpm exec husky install
-pnpm run generate-schema
-```
-
 ### Development
 
 ```bash
@@ -140,9 +123,6 @@ Then, depending on how you normally run the app:
     pnpm run dist
     ```
     Then run the newly generated `.exe` under `dist\` again (it overwrites the existing install).
-
-> 🔵 Note\
-> If `pnpm install` gets stuck rebuilding `node-pty`, see [Windows: if `pnpm install` hangs at `rebuild-node-pty`](#windows-if-pnpm-install-hangs-at-rebuild-node-pty) above.
 
 ## Usage
 
