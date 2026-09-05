@@ -13,7 +13,7 @@ import got from 'got';
 import open from 'open';
 import ora from 'ora';
 
-import {version} from '../app/package.json';
+import pkg from '../app/package.json';
 
 import * as api from './api';
 
@@ -179,7 +179,7 @@ args.command(
   'version',
   'Show the version of hyper',
   () => {
-    console.log(version);
+    console.log(pkg.version);
     process.exit(0);
   },
   []
