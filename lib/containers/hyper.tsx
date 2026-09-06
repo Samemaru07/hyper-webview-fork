@@ -13,7 +13,7 @@ import * as uiActions from '../actions/ui';
 import {getRegisteredKeys, getCommandHandler, shouldPreventDefault} from '../command-registry';
 import type Terms from '../components/terms';
 import {preloadLargeDictionary} from '../skk/dictionary';
-import {isSkkInterceptableKey, SkkEngine} from '../skk/engine';
+import {CANDIDATE_PAGE_LABELS, CANDIDATE_PAGE_SIZE, isSkkInterceptableKey, SkkEngine} from '../skk/engine';
 import {connect} from '../utils/plugins';
 
 import {HeaderContainer} from './header';
@@ -36,6 +36,38 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
   // PTYには送っていない、xterm.js上の見た目だけの表示なので、erase時はこの桁数分だけ
   // バックスペースで消す。ひらがな・漢字等の全角文字は2桁として数える。
   const preeditWidth = useRef(0);
+  // かな漢字変換の候補一覧ポップアップ(▼候補が複数ある場合のみ表示)。
+  // カーソル位置に追従させるため、現在のページの候補+選択キーラベルに加えて
+  // 画面上のピクセル座標も保持する。
+  const [candidatePopup, setCandidatePopup] = useState<{
+    pageItems: {label: string; candidate: string; selected: boolean}[];
+    top: number;
+    left: number;
+  } | null>(null);
+
+  /**
+   * xterm.js上のカーソル位置(セル座標)を、画面上のピクセル座標に変換する。
+   * xterm.jsは公開APIとしてカーソルのピクセル位置を提供していないため、
+   * 内部実装(_core._renderService)に依存する。xterm.jsのバージョンアップ時は
+   * この部分の互換性を要確認。
+   */
+  const getCursorPixelPosition = (): {top: number; left: number} | null => {
+    const term = terms.current?.getActiveTerm()?.term;
+    if (!term?.element) {
+      return null;
+    }
+    const core = (term as any)._core;
+    const cell = core?._renderService?.dimensions?.css?.cell;
+    if (!cell) {
+      return null;
+    }
+    const rect = term.element.getBoundingClientRect();
+    const {cursorX, cursorY} = term.buffer.active;
+    return {
+      top: rect.top + (cursorY + 1) * cell.height,
+      left: rect.left + cursorX * cell.width
+    };
+  };
 
   useEffect(() => {
     activeSessionRef.current = props.activeSession;
@@ -129,12 +161,14 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
   };
 
   /**
-   * skkEngineの現在のモード・サブモードにあわせて、画面右下のインジケーター表示を同期する。
+   * skkEngineの現在のモード・サブモードにあわせて、画面右下のインジケーター表示、
+   * および候補選択(▼)中の候補一覧ポップアップの表示を同期する。
    * skkEngineの状態はrefで保持しているため、変化しうる操作の後は都度これを呼ぶ必要がある。
    */
-  const updateSkkIndicator = () => {
+  const updateSkkOverlays = () => {
     if (skkEngine.current.getMode() !== 'kana') {
       setSkkIndicator(null);
+      setCandidatePopup(null);
       return;
     }
     switch (skkEngine.current.getSubMode()) {
@@ -147,6 +181,27 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       default:
         setSkkIndicator(skkEngine.current.getScript() === 'katakana' ? 'ア' : 'あ');
     }
+
+    const candidateList = skkEngine.current.getCandidateList();
+    if (!candidateList) {
+      setCandidatePopup(null);
+      return;
+    }
+    const position = getCursorPixelPosition();
+    if (!position) {
+      setCandidatePopup(null);
+      return;
+    }
+    // 現在のページ(CANDIDATE_PAGE_SIZE件単位)だけを切り出し、各候補にa/s/d/fのラベルを付与する。
+    const pageStart = Math.floor(candidateList.index / CANDIDATE_PAGE_SIZE) * CANDIDATE_PAGE_SIZE;
+    const pageItems = candidateList.candidates
+      .slice(pageStart, pageStart + CANDIDATE_PAGE_SIZE)
+      .map((candidate, i) => ({
+        label: CANDIDATE_PAGE_LABELS[i],
+        candidate,
+        selected: pageStart + i === candidateList.index
+      }));
+    setCandidatePopup({pageItems, top: position.top, left: position.left});
   };
 
   // かな入力モードでの母音・子音・句読点・長音符の確定、▽漢字変換モード(読み入力・辞書引き・
@@ -181,7 +236,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         preloadLargeDictionary();
       }
       syncPreeditDisplay();
-      updateSkkIndicator();
+      updateSkkOverlays();
       (e as any).catched = true;
       e.preventDefault();
       e.stopPropagation();
@@ -198,7 +253,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     if (subMode !== 'direct' && e.key === 'Escape') {
       skkEngine.current.cancel();
       syncPreeditDisplay();
-      updateSkkIndicator();
+      updateSkkOverlays();
       (e as any).catched = true;
       e.preventDefault();
       e.stopPropagation();
@@ -218,7 +273,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       } else {
         syncPreeditDisplay();
       }
-      updateSkkIndicator();
+      updateSkkOverlays();
       return;
     }
 
@@ -230,7 +285,43 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       e.stopPropagation();
       erasePreeditDisplay();
       commitToTerminal(committed);
-      updateSkkIndicator();
+      updateSkkOverlays();
+      return;
+    }
+
+    // xキー: henkan-select中(▼候補選択中)のみ、前のページへ戻る(実際のSKKの慣習に合わせる)。
+    // henkan-reading中やdirect中の"x"は、通常のローマ字入力として素通しする
+    // (下のisSkkInterceptableKey分岐でinput()に渡る)。
+    if (e.key === 'x' && subMode === 'henkan-select' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      skkEngine.current.previousCandidate();
+      syncPreeditDisplay();
+      updateSkkOverlays();
+      (e as any).catched = true;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    // a/s/d/fキー: 候補ポップアップ表示中(候補が複数ある場合)のみ、現在のページ内で
+    // 対応する候補を直接選択・確定する。候補が1件のみ(ポップアップ非表示)の場合は
+    // 通常のローマ字入力として素通しし、これまで通り現在の候補が暗黙確定される。
+    if (
+      CANDIDATE_PAGE_LABELS.includes(e.key) &&
+      subMode === 'henkan-select' &&
+      skkEngine.current.getCandidateList() !== null &&
+      !e.ctrlKey &&
+      !e.altKey &&
+      !e.metaKey
+    ) {
+      const committed = skkEngine.current.selectCandidateByLabel(e.key);
+      (e as any).catched = true;
+      e.preventDefault();
+      e.stopPropagation();
+      if (committed) {
+        erasePreeditDisplay();
+        commitToTerminal(committed);
+      }
+      updateSkkOverlays();
       return;
     }
 
@@ -257,7 +348,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       } else {
         syncPreeditDisplay();
       }
-      updateSkkIndicator();
+      updateSkkOverlays();
       return;
     }
 
@@ -266,7 +357,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     if (e.key === 'Backspace' && (skkEngine.current.hasPendingBuffer() || subMode !== 'direct')) {
       skkEngine.current.backspace();
       syncPreeditDisplay();
-      updateSkkIndicator();
+      updateSkkOverlays();
       (e as any).catched = true;
       e.preventDefault();
       e.stopPropagation();
@@ -287,11 +378,11 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         skkEngine.current.reset();
         syncPreeditDisplay();
       }
-      updateSkkIndicator();
+      updateSkkOverlays();
     } else if (skkEngine.current.hasPendingBuffer()) {
       skkEngine.current.reset();
       syncPreeditDisplay();
-      updateSkkIndicator();
+      updateSkkOverlays();
     }
   };
 
@@ -414,6 +505,19 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         <TermsContainer ref_={onTermsRef} />
         {props.customInnerChildren}
         {skkIndicator && <div className="skk_indicator">{skkIndicator}</div>}
+        {candidatePopup && (
+          <div className="skk_candidate_popup" style={{top: candidatePopup.top, left: candidatePopup.left}}>
+            {candidatePopup.pageItems.map(({label, candidate, selected}) => (
+              <div
+                key={label}
+                className={`skk_candidate_popup_item ${selected ? 'skk_candidate_popup_item_selected' : ''}`}
+              >
+                <span className="skk_candidate_popup_item_label">{label}</span>
+                {candidate}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <NotificationsContainer />
@@ -461,6 +565,36 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
             text-align: center;
             pointer-events: none;
             z-index: 100;
+          }
+
+          .skk_candidate_popup {
+            position: fixed;
+            min-width: 60px;
+            padding: 2px 0;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.85);
+            font-family: monospace;
+            font-size: 14px;
+            pointer-events: none;
+            z-index: 100;
+          }
+
+          .skk_candidate_popup_item {
+            padding: 2px 8px;
+            color: #ccc;
+            white-space: nowrap;
+          }
+
+          .skk_candidate_popup_item_selected {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.2);
+          }
+
+          .skk_candidate_popup_item_label {
+            display: inline-block;
+            min-width: 1em;
+            margin-right: 6px;
+            color: #888;
           }
         `}
       </style>

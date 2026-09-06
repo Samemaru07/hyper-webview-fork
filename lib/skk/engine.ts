@@ -114,6 +114,14 @@ const Z_SYMBOL_SHORTCUTS: Record<string, string> = {
 const VOWELS = new Set(['a', 'i', 'u', 'e', 'o']);
 
 /**
+ * 候補選択(▼)ポップアップでの1ページあたりの候補数、および各候補に割り当てる
+ * 選択キー。ホームポジションのa/s/d/fに合わせて4件区切りとする。
+ * hyper.tsx側のポップアップ描画でも同じ定数を使い、ラベル表示とページ計算を揃える。
+ */
+export const CANDIDATE_PAGE_SIZE = 4;
+export const CANDIDATE_PAGE_LABELS = ['a', 's', 'd', 'f'];
+
+/**
  * かな入力モードで直接ハンドリング対象とすべきキーかどうかを判定する。
  * 呼び出し側(hyper.tsx)のkeydownハンドラで、xterm.jsへの素通しを止めるかの判定に使う。
  * 大文字・小文字どちらも対象(大文字は▽漢字変換モードの開始トリガーになるため)。
@@ -206,6 +214,18 @@ export class SkkEngine {
       return this.reading + this.buffer;
     }
     return this.buffer;
+  }
+
+  /**
+   * 候補選択(▼)中の候補一覧・現在の選択位置を返す。
+   * 候補ポップアップUI用。候補が2件以上ある場合のみ非nullを返す
+   * (1件しかない場合は、インライン表示(getDisplay)のみで十分でありポップアップは不要なため)。
+   */
+  getCandidateList(): {candidates: string[]; index: number} | null {
+    if (this.subMode !== 'henkan-select' || this.candidates.length <= 1) {
+      return null;
+    }
+    return {candidates: this.candidates, index: this.candidateIndex};
   }
 
   private resetHenkan(): void {
@@ -479,7 +499,9 @@ export class SkkEngine {
    * スペースキー。
    * - henkan-reading中: 辞書引きを実行し、henkan-selectへ遷移する。
    *   候補が0件の場合は読みをそのままかなとして確定し、directに戻る(戻り値としてその文字列を返す)。
-   * - henkan-select中: 次候補へ送る(末尾なら先頭に循環)。
+   * - henkan-select中: 次のページへ送る(CANDIDATE_PAGE_SIZE件単位。末尾なら先頭ページに循環)。
+   *   候補がCANDIDATE_PAGE_SIZE件以下の場合、実質的に同じページに留まり続ける(従来の
+   *   1件ずつの巡回よりも、ページ送り自体は変わらない点に注意)。
    * - direct中: このメソッドは呼ばれない想定(呼び出し側でスペースを素通しする)。
    */
   space(): string {
@@ -506,7 +528,9 @@ export class SkkEngine {
       return '';
     }
     if (this.subMode === 'henkan-select') {
-      this.candidateIndex = (this.candidateIndex + 1) % this.candidates.length;
+      const pageStart = Math.floor(this.candidateIndex / CANDIDATE_PAGE_SIZE) * CANDIDATE_PAGE_SIZE;
+      const nextPageStart = pageStart + CANDIDATE_PAGE_SIZE;
+      this.candidateIndex = nextPageStart < this.candidates.length ? nextPageStart : 0;
       return '';
     }
     return '';
@@ -539,6 +563,50 @@ export class SkkEngine {
       return literal;
     }
     return '';
+  }
+
+  /**
+   * xキー。henkan-select中、前のページへ戻る(spaceの逆方向、CANDIDATE_PAGE_SIZE件単位)。
+   * 既に先頭ページの場合はそれ以上戻るページがないため、cancel()と同様に
+   * henkan-readingへ戻る(読みを保持したまま再入力できる状態)。
+   * henkan-select中でなければ何もしない。
+   */
+  previousCandidate(): void {
+    if (this.subMode !== 'henkan-select') {
+      return;
+    }
+    const pageStart = Math.floor(this.candidateIndex / CANDIDATE_PAGE_SIZE) * CANDIDATE_PAGE_SIZE;
+    if (pageStart === 0) {
+      this.cancel();
+      return;
+    }
+    this.candidateIndex = pageStart - CANDIDATE_PAGE_SIZE;
+  }
+
+  /**
+   * a/s/d/fキー。henkan-select中、現在のページ内でCANDIDATE_PAGE_LABELSに対応する
+   * 位置の候補を直接選択・確定する。該当する位置に候補が存在しない
+   * (ページ末尾で候補数がCANDIDATE_PAGE_SIZE未満の場合)、またはhenkan-select中で
+   * ない場合は何もせず空文字を返す。
+   */
+  selectCandidateByLabel(label: string): string {
+    if (this.subMode !== 'henkan-select') {
+      return '';
+    }
+    const offset = CANDIDATE_PAGE_LABELS.indexOf(label);
+    if (offset < 0) {
+      return '';
+    }
+    const pageStart = Math.floor(this.candidateIndex / CANDIDATE_PAGE_SIZE) * CANDIDATE_PAGE_SIZE;
+    const targetIndex = pageStart + offset;
+    if (targetIndex >= this.candidates.length) {
+      return '';
+    }
+    this.candidateIndex = targetIndex;
+    const chosen = this.candidates[this.candidateIndex];
+    this.recordHistoryIfNeeded(chosen);
+    this.resetHenkan();
+    return chosen;
   }
 
   /**
