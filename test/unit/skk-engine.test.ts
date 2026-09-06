@@ -773,6 +773,53 @@ test('getCandidateList: henkan-select以外の状態ではnullを返す', (t) =>
   engine.inputUpper('w');
   t.is(engine.getCandidateList(), null); // henkan-reading中
 });
+
+test('previousCandidate: henkan-select中、xで前の候補へ戻る(かった: 勝った/買った/勝手)', (t) => {
+  const testLookupKatta = (reading: string): string[] => {
+    const dict: Record<string, string[]> = {かった: ['勝った', '買った', '勝手']};
+    return dict[reading] ?? [];
+  };
+  const engine = new SkkEngine(testLookupKatta);
+  engine.toggleMode();
+  engine.inputUpper('k');
+  'atta'.split('').forEach((c) => engine.input(c));
+  engine.space();
+  t.is(engine.getDisplay(), '勝った');
+  engine.space();
+  t.is(engine.getDisplay(), '買った');
+  engine.space();
+  t.is(engine.getDisplay(), '勝手');
+  engine.previousCandidate();
+  t.is(engine.getDisplay(), '買った');
+  engine.previousCandidate();
+  t.is(engine.getDisplay(), '勝った');
+});
+
+test('previousCandidate: 先頭候補でxを押すと、henkan-readingへ戻る(cancel()と同じ挙動)', (t) => {
+  const testLookupKatta = (reading: string): string[] => {
+    const dict: Record<string, string[]> = {かった: ['勝った', '買った']};
+    return dict[reading] ?? [];
+  };
+  const engine = new SkkEngine(testLookupKatta);
+  engine.toggleMode();
+  engine.inputUpper('k');
+  'atta'.split('').forEach((c) => engine.input(c));
+  engine.space();
+  t.is(engine.getSubMode(), 'henkan-select');
+  engine.previousCandidate();
+  t.is(engine.getSubMode(), 'henkan-reading');
+  t.is(engine.getDisplay(), 'かった');
+});
+
+test('previousCandidate: henkan-select中でなければ何もしない', (t) => {
+  const engine = new SkkEngine(testLookup);
+  engine.toggleMode();
+  engine.inputUpper('w');
+  t.is(engine.getSubMode(), 'henkan-reading');
+  engine.previousCandidate();
+  t.is(engine.getSubMode(), 'henkan-reading'); // 変化なし
+});
+
 test('候補の並び替え: 送り仮名変換でも同様に、確定した候補が次回先頭に表示される', (t) => {
   const testLookupKaK = (reading: string): string[] => {
     const dict: Record<string, string[]> = {かk: ['書', '描', '欠']};

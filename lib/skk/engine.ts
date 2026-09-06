@@ -554,6 +554,23 @@ export class SkkEngine {
   }
 
   /**
+   * xキー。henkan-select中、前の候補へ戻る(spaceの逆方向)。
+   * 先頭の候補で押された場合はそれ以上戻る候補がないため、cancel()と同様に
+   * henkan-readingへ戻る(読みを保持したまま再入力できる状態)。
+   * henkan-select中でなければ何もしない。
+   */
+  previousCandidate(): void {
+    if (this.subMode !== 'henkan-select') {
+      return;
+    }
+    if (this.candidateIndex === 0) {
+      this.cancel();
+      return;
+    }
+    this.candidateIndex -= 1;
+  }
+
+  /**
    * Escape。変換を1段階キャンセルする。
    * - henkan-select中(送り仮名変換由来): 送り仮名ローマ字入力待ちの状態に戻る
    *   (マーカーは残したまま、送り仮名の入力だけやり直せる)。

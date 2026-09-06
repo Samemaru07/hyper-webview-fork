@@ -281,7 +281,20 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       e.stopPropagation();
       erasePreeditDisplay();
       commitToTerminal(committed);
-      updateSkkIndicator();
+      updateSkkOverlays();
+      return;
+    }
+
+    // xキー: henkan-select中(▼候補選択中)のみ、前の候補へ戻る(実際のSKKの慣習に合わせる)。
+    // henkan-reading中やdirect中の"x"は、通常のローマ字入力として素通しする
+    // (下のisSkkInterceptableKey分岐でinput()に渡る)。
+    if (e.key === 'x' && subMode === 'henkan-select' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      skkEngine.current.previousCandidate();
+      syncPreeditDisplay();
+      updateSkkOverlays();
+      (e as any).catched = true;
+      e.preventDefault();
+      e.stopPropagation();
       return;
     }
 
