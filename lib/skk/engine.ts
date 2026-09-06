@@ -208,6 +208,18 @@ export class SkkEngine {
     return this.buffer;
   }
 
+  /**
+   * 候補選択(▼)中の候補一覧・現在の選択位置を返す。
+   * 候補ポップアップUI用。候補が2件以上ある場合のみ非nullを返す
+   * (1件しかない場合は、インライン表示(getDisplay)のみで十分でありポップアップは不要なため)。
+   */
+  getCandidateList(): {candidates: string[]; index: number} | null {
+    if (this.subMode !== 'henkan-select' || this.candidates.length <= 1) {
+      return null;
+    }
+    return {candidates: this.candidates, index: this.candidateIndex};
+  }
+
   private resetHenkan(): void {
     this.subMode = 'direct';
     this.reading = '';

@@ -741,6 +741,38 @@ test('候補の並び替え: 初回は辞書順、確定した候補を次回は
   t.is(engine2.getDisplay(), '買った'); // 前回確定した候補が先頭に来る
 });
 
+test('getCandidateList: 候補が複数ある場合、一覧と現在の選択位置を返す(かった: 勝った/買った)', (t) => {
+  const testLookupKatta = (reading: string): string[] => {
+    const dict: Record<string, string[]> = {かった: ['勝った', '買った']};
+    return dict[reading] ?? [];
+  };
+  const engine = new SkkEngine(testLookupKatta);
+  engine.toggleMode();
+  engine.inputUpper('k');
+  'atta'.split('').forEach((c) => engine.input(c));
+  engine.space();
+  t.deepEqual(engine.getCandidateList(), {candidates: ['勝った', '買った'], index: 0});
+  engine.space();
+  t.deepEqual(engine.getCandidateList(), {candidates: ['勝った', '買った'], index: 1});
+});
+
+test('getCandidateList: 候補が1件のみの場合はnullを返す(ポップアップ不要)', (t) => {
+  const engine = new SkkEngine(testLookup);
+  engine.toggleMode();
+  engine.inputUpper('w');
+  'atashi'.split('').forEach((c) => engine.input(c));
+  engine.space();
+  t.is(engine.getDisplay(), '私');
+  t.is(engine.getCandidateList(), null);
+});
+
+test('getCandidateList: henkan-select以外の状態ではnullを返す', (t) => {
+  const engine = new SkkEngine(testLookup);
+  engine.toggleMode();
+  t.is(engine.getCandidateList(), null); // directモード
+  engine.inputUpper('w');
+  t.is(engine.getCandidateList(), null); // henkan-reading中
+});
 test('候補の並び替え: 送り仮名変換でも同様に、確定した候補が次回先頭に表示される', (t) => {
   const testLookupKaK = (reading: string): string[] => {
     const dict: Record<string, string[]> = {かk: ['書', '描', '欠']};

@@ -36,6 +36,38 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
   // PTYには送っていない、xterm.js上の見た目だけの表示なので、erase時はこの桁数分だけ
   // バックスペースで消す。ひらがな・漢字等の全角文字は2桁として数える。
   const preeditWidth = useRef(0);
+  // かな漢字変換の候補一覧ポップアップ(▼候補が複数ある場合のみ表示)。
+  // カーソル位置に追従させるため、表示内容に加えて画面上のピクセル座標も保持する。
+  const [candidatePopup, setCandidatePopup] = useState<{
+    candidates: string[];
+    index: number;
+    top: number;
+    left: number;
+  } | null>(null);
+
+  /**
+   * xterm.js上のカーソル位置(セル座標)を、画面上のピクセル座標に変換する。
+   * xterm.jsは公開APIとしてカーソルのピクセル位置を提供していないため、
+   * 内部実装(_core._renderService)に依存する。xterm.jsのバージョンアップ時は
+   * この部分の互換性を要確認。
+   */
+  const getCursorPixelPosition = (): {top: number; left: number} | null => {
+    const term = terms.current?.getActiveTerm()?.term;
+    if (!term?.element) {
+      return null;
+    }
+    const core = (term as any)._core;
+    const cell = core?._renderService?.dimensions?.css?.cell;
+    if (!cell) {
+      return null;
+    }
+    const rect = term.element.getBoundingClientRect();
+    const {cursorX, cursorY} = term.buffer.active;
+    return {
+      top: rect.top + (cursorY + 1) * cell.height,
+      left: rect.left + cursorX * cell.width
+    };
+  };
 
   useEffect(() => {
     activeSessionRef.current = props.activeSession;
@@ -129,12 +161,14 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
   };
 
   /**
-   * skkEngineの現在のモード・サブモードにあわせて、画面右下のインジケーター表示を同期する。
+   * skkEngineの現在のモード・サブモードにあわせて、画面右下のインジケーター表示、
+   * および候補選択(▼)中の候補一覧ポップアップの表示を同期する。
    * skkEngineの状態はrefで保持しているため、変化しうる操作の後は都度これを呼ぶ必要がある。
    */
-  const updateSkkIndicator = () => {
+  const updateSkkOverlays = () => {
     if (skkEngine.current.getMode() !== 'kana') {
       setSkkIndicator(null);
+      setCandidatePopup(null);
       return;
     }
     switch (skkEngine.current.getSubMode()) {
@@ -147,6 +181,23 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       default:
         setSkkIndicator(skkEngine.current.getScript() === 'katakana' ? 'ア' : 'あ');
     }
+
+    const candidateList = skkEngine.current.getCandidateList();
+    if (!candidateList) {
+      setCandidatePopup(null);
+      return;
+    }
+    const position = getCursorPixelPosition();
+    if (!position) {
+      setCandidatePopup(null);
+      return;
+    }
+    setCandidatePopup({
+      candidates: candidateList.candidates,
+      index: candidateList.index,
+      top: position.top,
+      left: position.left
+    });
   };
 
   // かな入力モードでの母音・子音・句読点・長音符の確定、▽漢字変換モード(読み入力・辞書引き・
@@ -181,7 +232,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         preloadLargeDictionary();
       }
       syncPreeditDisplay();
-      updateSkkIndicator();
+      updateSkkOverlays();
       (e as any).catched = true;
       e.preventDefault();
       e.stopPropagation();
@@ -198,7 +249,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     if (subMode !== 'direct' && e.key === 'Escape') {
       skkEngine.current.cancel();
       syncPreeditDisplay();
-      updateSkkIndicator();
+      updateSkkOverlays();
       (e as any).catched = true;
       e.preventDefault();
       e.stopPropagation();
@@ -218,7 +269,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       } else {
         syncPreeditDisplay();
       }
-      updateSkkIndicator();
+      updateSkkOverlays();
       return;
     }
 
@@ -257,7 +308,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       } else {
         syncPreeditDisplay();
       }
-      updateSkkIndicator();
+      updateSkkOverlays();
       return;
     }
 
@@ -266,7 +317,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     if (e.key === 'Backspace' && (skkEngine.current.hasPendingBuffer() || subMode !== 'direct')) {
       skkEngine.current.backspace();
       syncPreeditDisplay();
-      updateSkkIndicator();
+      updateSkkOverlays();
       (e as any).catched = true;
       e.preventDefault();
       e.stopPropagation();
@@ -287,11 +338,11 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         skkEngine.current.reset();
         syncPreeditDisplay();
       }
-      updateSkkIndicator();
+      updateSkkOverlays();
     } else if (skkEngine.current.hasPendingBuffer()) {
       skkEngine.current.reset();
       syncPreeditDisplay();
-      updateSkkIndicator();
+      updateSkkOverlays();
     }
   };
 
@@ -414,6 +465,18 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         <TermsContainer ref_={onTermsRef} />
         {props.customInnerChildren}
         {skkIndicator && <div className="skk_indicator">{skkIndicator}</div>}
+        {candidatePopup && (
+          <div className="skk_candidate_popup" style={{top: candidatePopup.top, left: candidatePopup.left}}>
+            {candidatePopup.candidates.map((candidate, i) => (
+              <div
+                key={i}
+                className={`skk_candidate_popup_item ${i === candidatePopup.index ? 'skk_candidate_popup_item_selected' : ''}`}
+              >
+                {candidate}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <NotificationsContainer />
@@ -461,6 +524,29 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
             text-align: center;
             pointer-events: none;
             z-index: 100;
+          }
+
+          .skk_candidate_popup {
+            position: fixed;
+            min-width: 60px;
+            padding: 2px 0;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.85);
+            font-family: monospace;
+            font-size: 14px;
+            pointer-events: none;
+            z-index: 100;
+          }
+
+          .skk_candidate_popup_item {
+            padding: 2px 8px;
+            color: #ccc;
+            white-space: nowrap;
+          }
+
+          .skk_candidate_popup_item_selected {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.2);
           }
         `}
       </style>
