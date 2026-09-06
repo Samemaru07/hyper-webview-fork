@@ -230,17 +230,76 @@ test('スペースで辞書引きし、henkan-selectへ遷移して最初の候�
   t.is(engine.getDisplay(), '漢字');
 });
 
-test('henkan-select中のスペースで次候補に送り、末尾で先頭へ循環する', (t) => {
-  const engine = new SkkEngine(testLookup);
+test('henkan-select中のスペースは次のページへ送り、末尾ページで先頭ページへ循環する(候補5件、ページサイズ4)', (t) => {
+  const testLookup5 = (reading: string): string[] => {
+    const dict: Record<string, string[]> = {ああ: ['候補A', '候補B', '候補C', '候補D', '候補E']};
+    return dict[reading] ?? [];
+  };
+  const engine = new SkkEngine(testLookup5);
+  engine.toggleMode();
+  engine.inputUpper('a');
+  engine.input('a');
+  engine.space();
+  t.deepEqual(engine.getCandidateList(), {
+    candidates: ['候補A', '候補B', '候補C', '候補D', '候補E'],
+    index: 0
+  }); // 1ページ目(候補A〜候補D)
+  engine.space();
+  t.deepEqual(engine.getCandidateList(), {
+    candidates: ['候補A', '候補B', '候補C', '候補D', '候補E'],
+    index: 4
+  }); // 2ページ目(候補Eのみ)
+  engine.previousCandidate();
+  t.deepEqual(engine.getCandidateList(), {
+    candidates: ['候補A', '候補B', '候補C', '候補D', '候補E'],
+    index: 0
+  }); // xで1ページ目へ戻る
+  engine.space();
+  t.deepEqual(engine.getCandidateList(), {
+    candidates: ['候補A', '候補B', '候補C', '候補D', '候補E'],
+    index: 4
+  }); // 再度スペースで2ページ目へ
+  engine.space();
+  t.deepEqual(engine.getCandidateList(), {
+    candidates: ['候補A', '候補B', '候補C', '候補D', '候補E'],
+    index: 0
+  }); // ページが尽きたので1ページ目へ循環
+  engine.previousCandidate();
+  t.is(engine.getSubMode(), 'henkan-reading'); // 既に1ページ目なので、xでhenkan-readingへ戻る
+});
+
+test('selectCandidateByLabel: a/s/d/fで現在のページ内の候補を直接選択・確定する(候補5件)', (t) => {
+  const testLookup5 = (reading: string): string[] => {
+    const dict: Record<string, string[]> = {ああ: ['候補A', '候補B', '候補C', '候補D', '候補E']};
+    return dict[reading] ?? [];
+  };
+  const engine = new SkkEngine(testLookup5);
+  engine.toggleMode();
+  engine.inputUpper('a');
+  engine.input('a');
+  engine.space();
+  t.is(engine.selectCandidateByLabel('d'), '候補C'); // 1ページ目の3番目('d')
+  t.is(engine.getSubMode(), 'direct');
+});
+
+test('selectCandidateByLabel: ページ内に対応する候補が存在しない場合は空文字を返し、状態も変わらない', (t) => {
+  const testLookupKatta = (reading: string): string[] => {
+    const dict: Record<string, string[]> = {かった: ['勝った', '買った']};
+    return dict[reading] ?? [];
+  };
+  const engine = new SkkEngine(testLookupKatta);
   engine.toggleMode();
   engine.inputUpper('k');
-  'anji'.split('').forEach((c) => engine.input(c));
+  'atta'.split('').forEach((c) => engine.input(c));
   engine.space();
-  t.is(engine.getDisplay(), '漢字');
-  engine.space();
-  t.is(engine.getDisplay(), '幹事');
-  engine.space();
-  t.is(engine.getDisplay(), '漢字');
+  t.is(engine.selectCandidateByLabel('d'), ''); // 候補は2件のみで、3番目('d')は存在しない
+  t.is(engine.getSubMode(), 'henkan-select'); // 状態は変化しない
+});
+
+test('selectCandidateByLabel: henkan-select中でなければ空文字を返す', (t) => {
+  const engine = new SkkEngine(testLookup);
+  engine.toggleMode();
+  t.is(engine.selectCandidateByLabel('a'), '');
 });
 
 test('Enterで選択中の候補を確定し、directモードへ戻る', (t) => {
@@ -249,9 +308,9 @@ test('Enterで選択中の候補を確定し、directモードへ戻る', (t) =>
   engine.inputUpper('k');
   'anji'.split('').forEach((c) => engine.input(c));
   engine.space();
-  engine.space(); // 幹事
+  t.is(engine.getDisplay(), '漢字');
   const committed = engine.confirm();
-  t.is(committed, '幹事');
+  t.is(committed, '漢字');
   t.is(engine.getSubMode(), 'direct');
   t.is(engine.getDisplay(), '');
 });
@@ -550,7 +609,7 @@ test('送り仮名: KanSuruと入力すると、単独の"n"が読みに含ま�
   t.is(engine.getSubMode(), 'direct');
 });
 
-test('送り仮名: henkan-select中はSpaceで他の候補(描く)にも送れる', (t) => {
+test('送り仮名: henkan-select中はsで他の候補(描く)も選択できる', (t) => {
   const engine = new SkkEngine(testLookup);
   engine.toggleMode();
   engine.inputUpper('k');
@@ -558,8 +617,8 @@ test('送り仮名: henkan-select中はSpaceで他の候補(描く)にも送れ�
   engine.inputUpper('k');
   engine.input('u');
   t.is(engine.getDisplay(), '書く');
-  engine.space();
-  t.is(engine.getDisplay(), '描く');
+  t.is(engine.selectCandidateByLabel('s'), '描く');
+  t.is(engine.getSubMode(), 'direct');
 });
 
 test('送り仮名: 辞書にエントリがない場合、読み+送り仮名をそのままかなで確定してdirectに戻る', (t) => {
@@ -721,16 +780,14 @@ test('候補の並び替え: 初回は辞書順、確定した候補を次回は
   };
   const history = createInMemoryHistoryStore();
 
-  // 1回目: 辞書順(勝った、買った)。2番目の「買った」を選ぶ。
+  // 1回目: 辞書順(勝った、買った)。sで2番目の「買った」を直接選択・確定する。
   const engine1 = new SkkEngine(testLookupKatta, history);
   engine1.toggleMode();
   engine1.inputUpper('k');
   'atta'.split('').forEach((c) => engine1.input(c));
   engine1.space();
   t.is(engine1.getDisplay(), '勝った'); // 初回は辞書順で先頭
-  engine1.space();
-  t.is(engine1.getDisplay(), '買った');
-  t.is(engine1.confirm(), '買った');
+  t.is(engine1.selectCandidateByLabel('s'), '買った');
 
   // 2回目: 別のエンジンインスタンス(再起動を想定)でも、同じhistory storeなら「買った」が先頭になる。
   const engine2 = new SkkEngine(testLookupKatta, history);
@@ -752,8 +809,6 @@ test('getCandidateList: 候補が複数ある場合、一覧と現在の選択�
   'atta'.split('').forEach((c) => engine.input(c));
   engine.space();
   t.deepEqual(engine.getCandidateList(), {candidates: ['勝った', '買った'], index: 0});
-  engine.space();
-  t.deepEqual(engine.getCandidateList(), {candidates: ['勝った', '買った'], index: 1});
 });
 
 test('getCandidateList: 候補が1件のみの場合はnullを返す(ポップアップ不要)', (t) => {
@@ -772,27 +827,6 @@ test('getCandidateList: henkan-select以外の状態ではnullを返す', (t) =>
   t.is(engine.getCandidateList(), null); // directモード
   engine.inputUpper('w');
   t.is(engine.getCandidateList(), null); // henkan-reading中
-});
-
-test('previousCandidate: henkan-select中、xで前の候補へ戻る(かった: 勝った/買った/勝手)', (t) => {
-  const testLookupKatta = (reading: string): string[] => {
-    const dict: Record<string, string[]> = {かった: ['勝った', '買った', '勝手']};
-    return dict[reading] ?? [];
-  };
-  const engine = new SkkEngine(testLookupKatta);
-  engine.toggleMode();
-  engine.inputUpper('k');
-  'atta'.split('').forEach((c) => engine.input(c));
-  engine.space();
-  t.is(engine.getDisplay(), '勝った');
-  engine.space();
-  t.is(engine.getDisplay(), '買った');
-  engine.space();
-  t.is(engine.getDisplay(), '勝手');
-  engine.previousCandidate();
-  t.is(engine.getDisplay(), '買った');
-  engine.previousCandidate();
-  t.is(engine.getDisplay(), '勝った');
 });
 
 test('previousCandidate: 先頭候補でxを押すと、henkan-readingへ戻る(cancel()と同じ挙動)', (t) => {
@@ -834,9 +868,7 @@ test('候補の並び替え: 送り仮名変換でも同様に、確定した候
   engine1.inputUpper('k');
   engine1.input('u');
   t.is(engine1.getDisplay(), '書く'); // 初回は辞書順
-  engine1.space();
-  t.is(engine1.getDisplay(), '描く');
-  t.is(engine1.confirm(), '描く');
+  t.is(engine1.selectCandidateByLabel('s'), '描く');
 
   const engine2 = new SkkEngine(testLookupKaK, history);
   engine2.toggleMode();
@@ -858,8 +890,7 @@ test('候補の並び替え: 履歴に記憶された候補が今回の候補一
   engine1.inputUpper('t');
   'esuto'.split('').forEach((c) => engine1.input(c));
   engine1.space();
-  engine1.space(); // 「乙」を選ぶ
-  t.is(engine1.confirm(), '乙');
+  t.is(engine1.selectCandidateByLabel('s'), '乙'); // 「乙」を選ぶ
 
   // 辞書の内容が変わり「乙」が候補から消えたケースを模擬
   const lookupB = (reading: string): string[] => {

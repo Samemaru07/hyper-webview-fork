@@ -13,7 +13,7 @@ import * as uiActions from '../actions/ui';
 import {getRegisteredKeys, getCommandHandler, shouldPreventDefault} from '../command-registry';
 import type Terms from '../components/terms';
 import {preloadLargeDictionary} from '../skk/dictionary';
-import {isSkkInterceptableKey, SkkEngine} from '../skk/engine';
+import {CANDIDATE_PAGE_LABELS, CANDIDATE_PAGE_SIZE, isSkkInterceptableKey, SkkEngine} from '../skk/engine';
 import {connect} from '../utils/plugins';
 
 import {HeaderContainer} from './header';
@@ -37,10 +37,10 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
   // バックスペースで消す。ひらがな・漢字等の全角文字は2桁として数える。
   const preeditWidth = useRef(0);
   // かな漢字変換の候補一覧ポップアップ(▼候補が複数ある場合のみ表示)。
-  // カーソル位置に追従させるため、表示内容に加えて画面上のピクセル座標も保持する。
+  // カーソル位置に追従させるため、現在のページの候補+選択キーラベルに加えて
+  // 画面上のピクセル座標も保持する。
   const [candidatePopup, setCandidatePopup] = useState<{
-    candidates: string[];
-    index: number;
+    pageItems: {label: string; candidate: string; selected: boolean}[];
     top: number;
     left: number;
   } | null>(null);
@@ -192,12 +192,16 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       setCandidatePopup(null);
       return;
     }
-    setCandidatePopup({
-      candidates: candidateList.candidates,
-      index: candidateList.index,
-      top: position.top,
-      left: position.left
-    });
+    // 現在のページ(CANDIDATE_PAGE_SIZE件単位)だけを切り出し、各候補にa/s/d/fのラベルを付与する。
+    const pageStart = Math.floor(candidateList.index / CANDIDATE_PAGE_SIZE) * CANDIDATE_PAGE_SIZE;
+    const pageItems = candidateList.candidates
+      .slice(pageStart, pageStart + CANDIDATE_PAGE_SIZE)
+      .map((candidate, i) => ({
+        label: CANDIDATE_PAGE_LABELS[i],
+        candidate,
+        selected: pageStart + i === candidateList.index
+      }));
+    setCandidatePopup({pageItems, top: position.top, left: position.left});
   };
 
   // かな入力モードでの母音・子音・句読点・長音符の確定、▽漢字変換モード(読み入力・辞書引き・
@@ -285,7 +289,7 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       return;
     }
 
-    // xキー: henkan-select中(▼候補選択中)のみ、前の候補へ戻る(実際のSKKの慣習に合わせる)。
+    // xキー: henkan-select中(▼候補選択中)のみ、前のページへ戻る(実際のSKKの慣習に合わせる)。
     // henkan-reading中やdirect中の"x"は、通常のローマ字入力として素通しする
     // (下のisSkkInterceptableKey分岐でinput()に渡る)。
     if (e.key === 'x' && subMode === 'henkan-select' && !e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -295,6 +299,29 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       (e as any).catched = true;
       e.preventDefault();
       e.stopPropagation();
+      return;
+    }
+
+    // a/s/d/fキー: 候補ポップアップ表示中(候補が複数ある場合)のみ、現在のページ内で
+    // 対応する候補を直接選択・確定する。候補が1件のみ(ポップアップ非表示)の場合は
+    // 通常のローマ字入力として素通しし、これまで通り現在の候補が暗黙確定される。
+    if (
+      CANDIDATE_PAGE_LABELS.includes(e.key) &&
+      subMode === 'henkan-select' &&
+      skkEngine.current.getCandidateList() !== null &&
+      !e.ctrlKey &&
+      !e.altKey &&
+      !e.metaKey
+    ) {
+      const committed = skkEngine.current.selectCandidateByLabel(e.key);
+      (e as any).catched = true;
+      e.preventDefault();
+      e.stopPropagation();
+      if (committed) {
+        erasePreeditDisplay();
+        commitToTerminal(committed);
+      }
+      updateSkkOverlays();
       return;
     }
 
@@ -480,11 +507,12 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         {skkIndicator && <div className="skk_indicator">{skkIndicator}</div>}
         {candidatePopup && (
           <div className="skk_candidate_popup" style={{top: candidatePopup.top, left: candidatePopup.left}}>
-            {candidatePopup.candidates.map((candidate, i) => (
+            {candidatePopup.pageItems.map(({label, candidate, selected}) => (
               <div
-                key={i}
-                className={`skk_candidate_popup_item ${i === candidatePopup.index ? 'skk_candidate_popup_item_selected' : ''}`}
+                key={label}
+                className={`skk_candidate_popup_item ${selected ? 'skk_candidate_popup_item_selected' : ''}`}
               >
+                <span className="skk_candidate_popup_item_label">{label}</span>
                 {candidate}
               </div>
             ))}
@@ -560,6 +588,13 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
           .skk_candidate_popup_item_selected {
             color: #fff;
             background: rgba(255, 255, 255, 0.2);
+          }
+
+          .skk_candidate_popup_item_label {
+            display: inline-block;
+            min-width: 1em;
+            margin-right: 6px;
+            color: #888;
           }
         `}
       </style>
