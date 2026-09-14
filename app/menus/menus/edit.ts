@@ -32,7 +32,9 @@ const editMenu = (
     {
       role: 'paste',
       accelerator: commandKeys['editor:paste'],
-      registerAccelerator: true
+      // レンダラー側(command-registry.ts)の独自実装に一本化したため、Electron側の
+      // グローバルアクセラレータ登録はオフにする。表示上のショートカット併記のみ残す(2026-09)。
+      registerAccelerator: false
     },
     {
       label: 'Select All',
