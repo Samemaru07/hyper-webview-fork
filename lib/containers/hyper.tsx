@@ -456,6 +456,9 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         terms.current?.getActiveTerm()?.focus();
       }
     };
+    window.pasteIntoActiveTerm = () => {
+      void terms.current?.getActiveTerm()?.pasteFromClipboard();
+    };
   };
 
   useEffect(() => {

@@ -7,6 +7,12 @@ let commands: Record<string, (event: any, dispatch: HyperDispatch) => void> = {
   'editor:search-close': (e, dispatch) => {
     dispatch(closeSearch(undefined, e));
     window.focusActiveTerm();
+  },
+  // Electronのrole:'paste'アクセラレータに委譲すると、alternate screen buffer
+  // 使用時(tmux/lazygit等)に貼り付けが二重になる不具合があったため、自前実装に
+  // 切り替えた(2026-09)。roleCommandsからも除外している。
+  'editor:paste': () => {
+    window.pasteIntoActiveTerm();
   }
 };
 
@@ -42,7 +48,6 @@ const roleCommands = [
   'editor:redo',
   'editor:cut',
   'editor:copy',
-  'editor:paste',
   'editor:selectAll',
   'window:minimize',
   'window:zoom',

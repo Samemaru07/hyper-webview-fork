@@ -8,6 +8,7 @@ declare global {
     __rpcId: string;
     rpc: Client;
     focusActiveTerm: (uid?: string) => void;
+    pasteIntoActiveTerm: () => void;
     profileName: string;
   }
 

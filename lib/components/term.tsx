@@ -423,6 +423,21 @@ export default class Term extends React.PureComponent<
     this.term.selectAll();
   }
 
+  // editor:paste(Ctrl+Shift+V等のショートカット)からの単一経路のペースト処理。
+  // 以前は Electron の role:'paste' アクセラレータに委譲していたが、alternate
+  // screen buffer使用時(tmux/lazygit等)に貼り付け内容が二重になる不具合が
+  // あったため、onWindowPasteと同じロジックで自前実装に切り替えた(2026-09)。
+  pasteFromClipboard = async () => {
+    let fallbackText = '';
+    try {
+      fallbackText = await navigator.clipboard.readText();
+    } catch {
+      // clipboard-read権限が無い等、失敗時はフォールバックなしで続行
+    }
+    const path = await ipcRenderer.invoke('getPathFromClipboard');
+    this.term.paste(path ?? fallbackText);
+  };
+
   fitResize() {
     if (!this.termWrapperRef) {
       return;
