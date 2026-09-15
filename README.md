@@ -53,6 +53,30 @@ Set a background image for the terminal via `hyper.json`. Unlike most other conf
 -   Also verified on WSL (Ubuntu)
 -   Also verified natively on Windows 11 (without WSL), for both development builds and generating a distributable installer (NSIS).
 
+## Installation
+
+### Windows
+
+Download the latest `.exe` installer from the [Releases page](https://github.com/Samemaru07/hyper-webview-fork/releases) and run it.
+
+> **Note:** The installer is not code-signed. Windows SmartScreen may show an "unrecognized publisher" warning — click "More info" → "Run anyway" to proceed.
+
+### Linux
+
+Clone the repository and build locally:
+
+```bash
+git clone https://github.com/Samemaru07/hyper-webview-fork.git
+cd hyper-webview-fork
+pnpm install
+npx electron-builder --linux dir
+./build/linux/install-desktop-entry.sh
+```
+
+This builds the app into `dist/linux-unpacked/` and registers a desktop entry so it appears in your application menu.
+
+> A prebuilt Linux binary is not currently provided via Releases. If you'd like one, please open an issue.
+
 ## Setup
 
 ```bash
