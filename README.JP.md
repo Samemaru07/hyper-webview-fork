@@ -53,6 +53,30 @@
 -   WSL (Ubuntu) でも動作確認
 -   Windows 11 ネイティブ (WSLを介さない) でも動作確認済み。開発ビルド・配布用インストーラー(NSIS)の生成ともに対応
 
+## インストール方法
+
+### Windows
+
+[Releasesページ](https://github.com/Samemaru07/hyper-webview-fork/releases)から最新の`.exe`インストーラーをダウンロードして実行してください。
+
+> **注記**：インストーラーはコード署名されていません。Windows SmartScreenで「発行元不明」の警告が表示される場合がありますが、「詳細情報」→「実行」で続行できます。
+
+### Linux
+
+リポジトリをクローンしてローカルでビルドしてください。
+
+```bash
+git clone https://github.com/Samemaru07/hyper-webview-fork.git
+cd hyper-webview-fork
+pnpm install
+npx electron-builder --linux dir
+./build/linux/install-desktop-entry.sh
+```
+
+これにより`dist/linux-unpacked/`にアプリがビルドされ、アプリケーションメニューにデスクトップエントリが登録されます。
+
+> Linux向けのビルド済みバイナリは現時点でReleasesに用意していません。必要であればIssueでお知らせください。
+
 ## セットアップ
 
 ```bash
