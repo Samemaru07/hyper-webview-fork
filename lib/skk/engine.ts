@@ -120,6 +120,12 @@ const VOWELS = new Set(['a', 'i', 'u', 'e', 'o']);
  */
 export const CANDIDATE_PAGE_SIZE = 4;
 export const CANDIDATE_PAGE_LABELS = ['a', 's', 'd', 'f'];
+/**
+ * スペースを押すたびに1件ずつインライン表示する候補の数。
+ * この件数を超えて初めて、a/s/d/fラベ機能付きの候補ポップアップ (ページ表示) に切り替わる。
+ * ほぼ第1候補しか使わない変換でも、ポップアップに阻まれずに次の入力へ進めるようにするための段階。
+ */
+export const INLINE_CANDIDATE_COUNT = 3;
 
 /**
  * かな入力モードで直接ハンドリング対象とすべきキーかどうかを判定する。
@@ -217,15 +223,41 @@ export class SkkEngine {
   }
 
   /**
-   * 候補選択(▼)中の候補一覧・現在の選択位置を返す。
-   * 候補ポップアップUI用。候補が2件以上ある場合のみ非nullを返す
-   * (1件しかない場合は、インライン表示(getDisplay)のみで十分でありポップアップは不要なため)。
+   * 候補選択(▼)中の候補一覧・現在の選択位置・現在ページの先頭位置を返す。
+   * 候補ポップアップUI用。インライン段階(先頭INLINE_CANDIDATE_COUNT件を1件ずつ
+   * 表示している間)は、ポップアップ不要なのでnullを返す。
    */
-  getCandidateList(): {candidates: string[]; index: number} | null {
-    if (this.subMode !== 'henkan-select' || this.candidates.length <= 1) {
+  getCandidateList(): {
+    candidates: string[];
+    index: number;
+    pageStart: number;
+  } | null {
+    if (this.subMode !== 'henkan-select') {
       return null;
     }
-    return {candidates: this.candidates, index: this.candidateIndex};
+    const pageStart = this.getPageStart();
+    if (pageStart === null) {
+      return null;
+    }
+    return {
+      candidates: this.candidates,
+      index: this.candidateIndex,
+      pageStart
+    };
+  }
+
+  /**
+   * 現在の候補位置がページ段階にある場合、そのページの先頭インデックスを返す。
+   * インライン段階(先頭INLINE_CANDIDATE_COUNT件)の間はnull。
+   * ページは INLINE_CANDIDATE_COUNT から CANDIDATE_PAGE_SIZE 件ずつ区切る
+   * (例: 3〜6件目、7〜10件目、…)。
+   */
+  private getPageStart(): number | null {
+    if (this.candidateIndex < INLINE_CANDIDATE_COUNT) {
+      return null;
+    }
+    const pageOffset = Math.floor((this.candidateIndex - INLINE_CANDIDATE_COUNT) / CANDIDATE_PAGE_SIZE);
+    return INLINE_CANDIDATE_COUNT + pageOffset * CANDIDATE_PAGE_SIZE;
   }
 
   private resetHenkan(): void {
@@ -528,9 +560,11 @@ export class SkkEngine {
       return '';
     }
     if (this.subMode === 'henkan-select') {
-      const pageStart = Math.floor(this.candidateIndex / CANDIDATE_PAGE_SIZE) * CANDIDATE_PAGE_SIZE;
-      const nextPageStart = pageStart + CANDIDATE_PAGE_SIZE;
-      this.candidateIndex = nextPageStart < this.candidates.length ? nextPageStart : 0;
+      // インライン段階: 1件ずつ次の候補へ。INLINE_CANDIDATE_COUNT件目を超えるとページ段階に入る。
+      // ページ段階: 次のページの先頭へ。どちらも末尾を超えたら先頭候補に循環する。
+      const pageStart = this.getPageStart();
+      const nextIndex = pageStart === null ? this.candidateIndex + 1 : pageStart + CANDIDATE_PAGE_SIZE;
+      this.candidateIndex = nextIndex < this.candidates.length ? nextIndex : 0;
       return '';
     }
     return '';
@@ -566,26 +600,31 @@ export class SkkEngine {
   }
 
   /**
-   * xキー。henkan-select中、前のページへ戻る(spaceの逆方向、CANDIDATE_PAGE_SIZE件単位)。
-   * 既に先頭ページの場合はそれ以上戻るページがないため、cancel()と同様に
-   * henkan-readingへ戻る(読みを保持したまま再入力できる状態)。
+   * xキー。henkan-select中、1つ前の候補(またはページ)へ戻る(spaceの逆方向)。
+   * - インライン段階: 1件前の候補へ。先頭候補ならcancel()と同様にhenkan-readingへ戻る。
+   * - ページ段階: 前のページへ。最初のページからは、インライン段階の最後の候補へ戻る。
    * henkan-select中でなければ何もしない。
    */
   previousCandidate(): void {
     if (this.subMode !== 'henkan-select') {
       return;
     }
-    const pageStart = Math.floor(this.candidateIndex / CANDIDATE_PAGE_SIZE) * CANDIDATE_PAGE_SIZE;
-    if (pageStart === 0) {
-      this.cancel();
+    const pageStart = this.getPageStart();
+    if (pageStart === null) {
+      if (this.candidateIndex === 0) {
+        this.cancel();
+        return;
+      }
+      this.candidateIndex -= 1;
       return;
     }
-    this.candidateIndex = pageStart - CANDIDATE_PAGE_SIZE;
+    this.candidateIndex =
+      pageStart === INLINE_CANDIDATE_COUNT ? INLINE_CANDIDATE_COUNT - 1 : pageStart - CANDIDATE_PAGE_SIZE;
   }
 
   /**
-   * a/s/d/fキー。henkan-select中、現在のページ内でCANDIDATE_PAGE_LABELSに対応する
-   * 位置の候補を直接選択・確定する。該当する位置に候補が存在しない
+   * a/s/d/fキー。ページ段階中、現在のページ内でCANDIDATE_PAGE_LABELSに対応する
+   * 位置の候補を直接選択・確定する。インライン段階中、該当する位置に候補が存在しない
    * (ページ末尾で候補数がCANDIDATE_PAGE_SIZE未満の場合)、またはhenkan-select中で
    * ない場合は何もせず空文字を返す。
    */
@@ -593,11 +632,14 @@ export class SkkEngine {
     if (this.subMode !== 'henkan-select') {
       return '';
     }
+    const pageStart = this.getPageStart();
+    if (pageStart === null) {
+      return '';
+    }
     const offset = CANDIDATE_PAGE_LABELS.indexOf(label);
     if (offset < 0) {
       return '';
     }
-    const pageStart = Math.floor(this.candidateIndex / CANDIDATE_PAGE_SIZE) * CANDIDATE_PAGE_SIZE;
     const targetIndex = pageStart + offset;
     if (targetIndex >= this.candidates.length) {
       return '';

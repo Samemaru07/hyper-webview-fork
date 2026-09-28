@@ -193,15 +193,18 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
       return;
     }
     // 現在のページ(CANDIDATE_PAGE_SIZE件単位)だけを切り出し、各候補にa/s/d/fのラベルを付与する。
-    const pageStart = Math.floor(candidateList.index / CANDIDATE_PAGE_SIZE) * CANDIDATE_PAGE_SIZE;
-    const pageItems = candidateList.candidates
-      .slice(pageStart, pageStart + CANDIDATE_PAGE_SIZE)
-      .map((candidate, i) => ({
-        label: CANDIDATE_PAGE_LABELS[i],
-        candidate,
-        selected: pageStart + i === candidateList.index
-      }));
-    setCandidatePopup({pageItems, top: position.top, left: position.left});
+    // ページの先頭位置はエンジン側(getCandidateList)が返す値を使う。
+    const {candidates, index, pageStart} = candidateList;
+    const pageItems = candidates.slice(pageStart, pageStart + CANDIDATE_PAGE_SIZE).map((candidate, i) => ({
+      label: CANDIDATE_PAGE_LABELS[i],
+      candidate,
+      selected: pageStart + i === index
+    }));
+    setCandidatePopup({
+      pageItems,
+      top: position.top,
+      left: position.left
+    });
   };
 
   // かな入力モードでの母音・子音・句読点・長音符の確定、▽漢字変換モード(読み入力・辞書引き・
@@ -509,7 +512,13 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         {props.customInnerChildren}
         {skkIndicator && <div className="skk_indicator">{skkIndicator}</div>}
         {candidatePopup && (
-          <div className="skk_candidate_popup" style={{top: candidatePopup.top, left: candidatePopup.left}}>
+          <div
+            className="skk_candidate_popup"
+            style={{
+              top: candidatePopup.top,
+              left: candidatePopup.left
+            }}
+          >
             {candidatePopup.pageItems.map(({label, candidate, selected}) => (
               <div
                 key={label}
@@ -606,7 +615,11 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         Add custom CSS to Hyper.
         We add a scope to the customCSS so that it can get around the weighting applied by styled-jsx
       */}
-      <style dangerouslySetInnerHTML={{__html: stylis('#hyper', customCSS)}} />
+      <style
+        dangerouslySetInnerHTML={{
+          __html: stylis('#hyper', customCSS)
+        }}
+      />
     </div>
   );
 });
@@ -640,7 +653,9 @@ const mapDispatchToProps = (dispatch: HyperDispatch) => {
   };
 };
 
-const HyperContainer = connect(mapStateToProps, mapDispatchToProps, null, {forwardRef: true})(Hyper, 'Hyper');
+const HyperContainer = connect(mapStateToProps, mapDispatchToProps, null, {
+  forwardRef: true
+})(Hyper, 'Hyper');
 
 export default HyperContainer;
 
