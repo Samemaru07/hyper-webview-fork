@@ -1,4 +1,4 @@
-import smallDictionary from './dictionary/skk-jisyo-s';
+import smallDictionary from "./dictionary/skk-jisyo-s";
 
 type Dictionary = Record<string, string[]>;
 
@@ -14,12 +14,12 @@ let loadingPromise: Promise<void> | null = null;
  * (アプリ起動直後には呼ばない。読み込み処理自体が数百ms程度かかりうるため)。
  */
 export function preloadLargeDictionary(): void {
-  if (largeDictionary || loadingPromise) {
-    return;
-  }
-  loadingPromise = import('./dictionary/skk-jisyo-l').then((mod) => {
-    largeDictionary = mod.default;
-  });
+    if (largeDictionary || loadingPromise) {
+        return;
+    }
+    loadingPromise = import("./dictionary/skk-jisyo-l").then((mod) => {
+        largeDictionary = mod.default;
+    });
 }
 
 /**
@@ -33,6 +33,6 @@ export function preloadLargeDictionary(): void {
  * 送り仮名付きの見出し語は現時点で辞書生成時に除外済み(MVPスコープ外)。
  */
 export function lookupCandidates(reading: string): string[] {
-  const dictionary = largeDictionary ?? smallDictionary;
-  return dictionary[reading] ?? [];
+    const dictionary = largeDictionary ?? smallDictionary;
+    return dictionary[reading] ?? [];
 }

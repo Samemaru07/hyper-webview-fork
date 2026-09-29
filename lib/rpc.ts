@@ -1,4 +1,4 @@
-import RPC from './utils/rpc';
+import RPC from "./utils/rpc";
 
 const rpc = new RPC();
 

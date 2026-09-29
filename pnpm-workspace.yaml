@@ -1,11 +1,11 @@
 packages: []
 ignoredBuiltDependencies:
-  - core-js
+    - core-js
 minimumReleaseAge: 2880
 onlyBuiltDependencies:
-  - electron
-  - electron-mksnapshot
-  - electron-winstaller
-  - leveldown
+    - electron
+    - electron-mksnapshot
+    - electron-winstaller
+    - leveldown
 overrides:
-  node-gyp: ^11.5.0
+    node-gyp: ^11.5.0

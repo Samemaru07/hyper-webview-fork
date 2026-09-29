@@ -1,7 +1,10 @@
-const { execSync } = require("child_process")
+const { execSync } = require("child_process");
 
 function run(arch) {
-    execSync(`cross-env npm_config_arch=${arch} pnpm run v8-snapshot:arch`, { stdio: "inherit", shell: true });
+    execSync(`cross-env npm_config_arch=${arch} pnpm run v8-snapshot:arch`, {
+        stdio: "inherit",
+        shell: true,
+    });
 }
 
 run("x64");

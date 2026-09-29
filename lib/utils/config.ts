@@ -1,30 +1,38 @@
-import {resolve} from 'path';
+import { resolve } from "path";
 
-import {app as remoteApp, require as remoteRequire, getCurrentWindow} from '@electron/remote';
+import {
+    app as remoteApp,
+    require as remoteRequire,
+    getCurrentWindow,
+} from "@electron/remote";
 // TODO: Should be updates to new async API https://medium.com/@nornagon/electrons-remote-module-considered-harmful-70d69500f31
 
-import {ipcRenderer} from './ipc';
+import { ipcRenderer } from "./ipc";
 
 // lib/utils/plugins.ts と同じ理由(2026-09, Electron 44 upgrade)で絶対パス指定にする。
-const plugins = remoteRequire(resolve(remoteApp.getAppPath(), 'plugins')) as typeof import('../../app/plugins');
+const plugins = remoteRequire(
+    resolve(remoteApp.getAppPath(), "plugins"),
+) as typeof import("../../app/plugins");
 
-Object.defineProperty(window, 'profileName', {
-  get() {
-    return getCurrentWindow().profileName;
-  },
-  set() {
-    throw new Error('profileName is readonly');
-  }
+Object.defineProperty(window, "profileName", {
+    get() {
+        return getCurrentWindow().profileName;
+    },
+    set() {
+        throw new Error("profileName is readonly");
+    },
 });
 
 export function getConfig() {
-  return plugins.getDecoratedConfig(window.profileName);
+    return plugins.getDecoratedConfig(window.profileName);
 }
 
-export function subscribe(fn: (event: Electron.IpcRendererEvent, ...args: any[]) => void) {
-  ipcRenderer.on('config change', fn);
-  ipcRenderer.on('plugins change', fn);
-  return () => {
-    ipcRenderer.removeListener('config change', fn);
-  };
+export function subscribe(
+    fn: (event: Electron.IpcRendererEvent, ...args: any[]) => void,
+) {
+    ipcRenderer.on("config change", fn);
+    ipcRenderer.on("plugins change", fn);
+    return () => {
+        ipcRenderer.removeListener("config change", fn);
+    };
 }
