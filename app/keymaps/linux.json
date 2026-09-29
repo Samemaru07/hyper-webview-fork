@@ -35,7 +35,7 @@
   "editor:redo": "ctrl+shift+y",
   "editor:cut": "ctrl+shift+x",
   "editor:copy": "ctrl+shift+c",
-  "editor:paste": "ctrl+shift+v",
+  "editor:paste": ["ctrl+shift+v", "ctrl+v"],
   "editor:selectAll": "ctrl+shift+a",
   "editor:search": "ctrl+shift+f",
   "editor:search-close": "esc",
