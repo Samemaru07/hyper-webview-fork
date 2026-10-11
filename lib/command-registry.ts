@@ -1,57 +1,61 @@
-import type {HyperDispatch} from '../typings/hyper';
+import type { HyperDispatch } from "../typings/hyper";
 
-import {closeSearch} from './actions/sessions';
-import {ipcRenderer} from './utils/ipc';
+import { closeSearch } from "./actions/sessions";
+import { ipcRenderer } from "./utils/ipc";
 
 let commands: Record<string, (event: any, dispatch: HyperDispatch) => void> = {
-  'editor:search-close': (e, dispatch) => {
-    dispatch(closeSearch(undefined, e));
-    window.focusActiveTerm();
-  },
-  // Electronのrole:'paste'アクセラレータに委譲すると、alternate screen buffer
-  // 使用時(tmux/lazygit等)に貼り付けが二重になる不具合があったため、自前実装に
-  // 切り替えた(2026-09)。roleCommandsからも除外している。
-  'editor:paste': () => {
-    window.pasteIntoActiveTerm();
-  }
+    "editor:search-close": (e, dispatch) => {
+        dispatch(closeSearch(undefined, e));
+        window.focusActiveTerm();
+    },
+    // Electronのrole:'paste'アクセラレータに委譲すると、alternate screen buffer
+    // 使用時(tmux/lazygit等)に貼り付けが二重になる不具合があったため、自前実装に
+    // 切り替えた(2026-09)。roleCommandsからも除外している。
+    "editor:paste": () => {
+        window.pasteIntoActiveTerm();
+    },
 };
 
 export const getRegisteredKeys = async () => {
-  const keymaps = await ipcRenderer.invoke('getDecoratedKeymaps');
+    const keymaps = await ipcRenderer.invoke("getDecoratedKeymaps");
 
-  return Object.keys(keymaps).reduce((result: Record<string, string>, actionName) => {
-    const commandKeys = keymaps[actionName];
-    commandKeys.forEach((shortcut) => {
-      result[shortcut] = actionName;
-    });
-    return result;
-  }, {});
+    return Object.keys(keymaps).reduce(
+        (result: Record<string, string>, actionName) => {
+            const commandKeys = keymaps[actionName];
+            commandKeys.forEach((shortcut) => {
+                result[shortcut] = actionName;
+            });
+            return result;
+        },
+        {},
+    );
 };
 
 export const registerCommandHandlers = (cmds: typeof commands) => {
-  if (!cmds) {
-    return;
-  }
+    if (!cmds) {
+        return;
+    }
 
-  commands = Object.assign(commands, cmds);
+    commands = Object.assign(commands, cmds);
 };
 
 export const getCommandHandler = (command: string) => {
-  return commands[command];
+    return commands[command];
 };
 
 // Some commands are directly excuted by Electron menuItem role.
 // They should not be prevented to reach Electron.
 const roleCommands = [
-  'window:close',
-  'editor:undo',
-  'editor:redo',
-  'editor:cut',
-  'editor:copy',
-  'editor:selectAll',
-  'window:minimize',
-  'window:zoom',
-  'window:toggleFullScreen'
+    "window:close",
+    "editor:undo",
+    "editor:redo",
+    "editor:cut",
+    "editor:copy",
+    "editor:selectAll",
+    "window:minimize",
+    "window:zoom",
+    "window:toggleFullScreen",
 ];
 
-export const shouldPreventDefault = (command: string) => !roleCommands.includes(command);
+export const shouldPreventDefault = (command: string) =>
+    !roleCommands.includes(command);

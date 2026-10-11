@@ -1,7 +1,7 @@
-export const INIT = 'INIT';
+export const INIT = "INIT";
 
 export interface InitAction {
-  type: typeof INIT;
+    type: typeof INIT;
 }
 
 export type InitActions = InitAction;
