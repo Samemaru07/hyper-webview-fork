@@ -266,8 +266,9 @@ const main = (argv: string[]) => {
     if (flags.verbose) {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-call
         child.stdout?.on("data", (data) => console.log(data.toString("utf8")));
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+
         child.stderr?.on("data", (data) =>
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
             console.error(data.toString("utf8")),
         );
     }
