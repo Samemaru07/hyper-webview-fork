@@ -1,8 +1,11 @@
-import React, { forwardRef } from "react";
+import React, { forwardRef, useState } from "react";
 
 import type { TabProps } from "../../typings/hyper";
 
+import InlineEdit from "./inline_edit";
+
 const Tab = forwardRef<HTMLLIElement, TabProps>((props, ref) => {
+    const [editing, setEditing] = useState(false);
     const handleClick = (event: React.MouseEvent) => {
         const isLeftClick = event.nativeEvent.which === 1;
 
@@ -36,10 +39,28 @@ const Tab = forwardRef<HTMLLIElement, TabProps>((props, ref) => {
                     className={`tab_text ${isLast ? "tab_textLast" : ""} ${isActive ? "tab_textActive" : ""}`}
                     onClick={handleClick}
                     onMouseUp={handleMouseUp}
+                    onDoubleClick={(event) => {
+                        // ヘッダーのonDoubleClick(ウィンドウ最大化)に伝播させない
+                        event.stopPropagation();
+                        setEditing(true);
+                    }}
                 >
-                    <span title={props.text} className="tab_textInner">
-                        {props.text}
-                    </span>
+                    {editing ? (
+                        <span className="tab_textInner">
+                            <InlineEdit
+                                value={props.text}
+                                onConfirm={(value) => {
+                                    props.onRename(value);
+                                    setEditing(false);
+                                }}
+                                onCancel={() => setEditing(false)}
+                            />
+                        </span>
+                    ) : (
+                        <span title={props.text} className="tab_textInner">
+                            {props.text}
+                        </span>
+                    )}
                 </span>
                 <i className="tab_icon" onClick={props.onClose}>
                     <svg className="tab_shape">

@@ -13,6 +13,7 @@ export const SESSION_SET_CWD = "SESSION_SET_CWD";
 export const SESSION_SEARCH = "SESSION_SEARCH";
 export const SESSION_URL_SET = "SESSION_URL_SET";
 export const SESSION_URL_UNSET = "SESSION_URL_UNSET";
+export const SESSION_SET_TAB_TITLE = "SESSION_SET_TAB_TITLE";
 
 export interface SessionAddAction {
     type: typeof SESSION_ADD;
@@ -88,6 +89,12 @@ export interface SessionUrlUnsetAction {
     uid: string;
 }
 
+export interface SessionSetTabTitleAction {
+    type: typeof SESSION_SET_TAB_TITLE;
+    uid: string;
+    title: string;
+}
+
 export type SessionActions =
     | SessionAddAction
     | SessionResizeAction
@@ -103,4 +110,5 @@ export type SessionActions =
     | SessionSetCwdAction
     | SessionSearchAction
     | SessionUrlSetAction
-    | SessionUrlUnsetAction;
+    | SessionUrlUnsetAction
+    | SessionSetTabTitleAction;

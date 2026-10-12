@@ -276,6 +276,14 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     // fcitx5のcomposition機構を一切経由させないよう、windowのcaptureフェーズで
     // xterm.jsのtextareaに到達する前にイベントを奪う。
     const handleSkkKeydown = (e: KeyboardEvent) => {
+        // タブ名変更の入力欄(InlineEdit)では、SKKエンジンを経由させず通常の入力として扱う。
+        // この判定がないと、かな入力モード中の入力がPTYへ送出され、入力欄に文字が入らない。
+        if (
+            e.target instanceof HTMLElement &&
+            e.target.closest("[data-skk-passthrough]")
+        ) {
+            return;
+        }
         // 修飾キー単体のkeydown(Control/Shift/Alt/Metaを押した瞬間、まだ他のキーと組み合わさっていない状態)は
         // SKKの状態に一切影響させず素通りさせる。これを除外しないと、例えばEscでのキャンセルを意図して
         // Ctrlキーを押した瞬間に「未対応キー」として変換状態がリセットされてしまう。

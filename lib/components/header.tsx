@@ -3,6 +3,7 @@ import React, { forwardRef, useState } from "react";
 import type { HeaderProps } from "../../typings/hyper";
 import { decorate, getTabsProps } from "../utils/plugins";
 
+import InlineEdit from "./inline_edit";
 import Tabs_ from "./tabs";
 
 const Tabs = decorate(Tabs_, "Tabs");
@@ -12,6 +13,7 @@ const Header = forwardRef<HTMLElement, HeaderProps>((props, ref) => {
         useState<number>(0);
     const [headerMouseDownWindowY, setHeaderMouseDownWindowY] =
         useState<number>(0);
+    const [renamingWindowTitle, setRenamingWindowTitle] = useState(false);
 
     const onChangeIntent = (active: string) => {
         // we ignore clicks if they're a byproduct of a drag
@@ -122,7 +124,32 @@ const Header = forwardRef<HTMLElement, HeaderProps>((props, ref) => {
                             <use xlinkHref="./renderer/assets/icons.svg#hamburger-menu" />
                         </svg>
                     )}
-                    <span className="header_appTitle">{title}</span>
+                    {renamingWindowTitle && props.tabs.length === 1 ? (
+                        <span className="header_appTitle header_appTitleEditing">
+                            <InlineEdit
+                                value={title}
+                                onConfirm={(value) => {
+                                    props.onRenameTab(props.tabs[0].uid, value);
+                                    setRenamingWindowTitle(false);
+                                }}
+                                onCancel={() => setRenamingWindowTitle(false)}
+                            />
+                        </span>
+                    ) : (
+                        <span
+                            className="header_appTitle"
+                            onDoubleClick={(event) => {
+                                // タブが複数ある間は、通常どおりウィンドウの最大化に任せる
+                                if (props.tabs.length !== 1) {
+                                    return;
+                                }
+                                event.stopPropagation();
+                                setRenamingWindowTitle(true);
+                            }}
+                        >
+                            {title}
+                        </span>
+                    )}
                     {winCtrls && (
                         <div
                             className={`header_windowControls ${left ? "header_windowControlsLeft" : ""}`}
@@ -162,6 +189,7 @@ const Header = forwardRef<HTMLElement, HeaderProps>((props, ref) => {
                     borderColor: props.borderColor,
                     backgroundColor: props.backgroundColor,
                     onClose: props.onCloseTab,
+                    onRename: props.onRenameTab,
                     onChange: onChangeIntent,
                     fullScreen: props.fullScreen,
                     defaultProfile: props.defaultProfile,
@@ -207,6 +235,13 @@ const Header = forwardRef<HTMLElement, HeaderProps>((props, ref) => {
 
                 .header_appTitle {
                     font-size: 12px;
+                    -webkit-app-region: no-drag;
+                }
+
+                .header_appTitleEditing {
+                    display: inline-block;
+                    width: 240px;
+                    height: 18px;
                 }
 
                 .header_shape,

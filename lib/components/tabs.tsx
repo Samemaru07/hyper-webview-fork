@@ -10,7 +10,14 @@ const Tab = decorate(Tab_, "Tab");
 const isMac = /Mac/.test(navigator.userAgent);
 
 const Tabs = forwardRef<HTMLElement, TabsProps>((props, ref) => {
-    const { tabs = [], borderColor, onChange, onClose, fullScreen } = props;
+    const {
+        tabs = [],
+        borderColor,
+        onChange,
+        onClose,
+        onRename,
+        fullScreen,
+    } = props;
 
     const hide = !isMac && tabs.length === 1;
 
@@ -37,6 +44,7 @@ const Tabs = forwardRef<HTMLElement, TabsProps>((props, ref) => {
                                 hasActivity,
                                 onSelect: onChange.bind(null, uid),
                                 onClose: onClose.bind(null, uid),
+                                onRename: onRename.bind(null, uid),
                             });
                             return <Tab key={`tab-${uid}`} {...tabProps} />;
                         })}
