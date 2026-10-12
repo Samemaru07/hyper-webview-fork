@@ -56,15 +56,15 @@ const Tabs = forwardRef<HTMLElement, TabsProps>((props, ref) => {
             <style jsx>{`
                 .tabs_nav {
                     font-size: 12px;
-                    height: 34px;
-                    line-height: 34px;
+                    height: 26px;
+                    line-height: 26px;
                     vertical-align: middle;
                     color: #9b9b9b;
                     cursor: default;
                     position: relative;
                     -webkit-user-select: none;
                     -webkit-app-region: ${isMac ? "drag" : ""};
-                    top: ${isMac ? "0px" : "34px"};
+                    top: ${isMac ? "0px" : "22px"};
                     display: flex;
                     flex-flow: row;
                 }
@@ -85,7 +85,7 @@ const Tabs = forwardRef<HTMLElement, TabsProps>((props, ref) => {
                 }
 
                 .tabs_list {
-                    max-height: 34px;
+                    max-height: 26px;
                     display: flex;
                     flex-flow: row;
                     margin-left: ${isMac ? "76px" : "0"};

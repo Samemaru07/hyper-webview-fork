@@ -186,7 +186,7 @@ const Header = forwardRef<HTMLElement, HeaderProps>((props, ref) => {
                 }
 
                 .header_windowHeader {
-                    height: 34px;
+                    height: 22px;
                     width: 100%;
                     position: fixed;
                     top: 1px;
