@@ -94,7 +94,7 @@ const Tab = forwardRef<HTMLLIElement, TabProps>((props, ref) => {
 
                 .tab_text {
                     transition: color 0.2s ease;
-                    height: 34px;
+                    height: 26px;
                     display: block;
                     width: 100%;
                     position: relative;
@@ -122,7 +122,7 @@ const Tab = forwardRef<HTMLLIElement, TabProps>((props, ref) => {
                     pointer-events: none;
                     position: absolute;
                     right: 7px;
-                    top: 10px;
+                    top: 6px;
                     display: inline-block;
                     width: 14px;
                     height: 14px;

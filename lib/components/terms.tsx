@@ -160,7 +160,7 @@ export default class Terms extends React.Component<
                 <style jsx>{`
                     .terms_terms {
                         position: absolute;
-                        margin-top: 34px;
+                        margin-top: 22px;
                         top: 0;
                         right: 0;
                         left: 0;
@@ -169,18 +169,18 @@ export default class Terms extends React.Component<
                     }
 
                     .terms_termsShifted {
-                        margin-top: 68px;
+                        margin-top: 48px;
                         animation: shift-down 0.2s ease-out;
                     }
 
                     .terms_termsNotShifted {
-                        margin-top: 34px;
+                        margin-top: 22px;
                         animation: shift-up 0.3s ease;
                     }
 
                     @keyframes shift-down {
                         0% {
-                            transform: translateY(-34px);
+                            transform: translateY(-26px);
                         }
                         100% {
                             transform: translateY(0px);
@@ -189,7 +189,7 @@ export default class Terms extends React.Component<
 
                     @keyframes shift-up {
                         0% {
-                            transform: translateY(34px);
+                            transform: translateY(26px);
                         }
                         100% {
                             transform: translateY(0px);
