@@ -45,10 +45,26 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     // skkEngineの状態はrefで保持しているためReactの再レンダリングをトリガーしない。
     // インジケーター表示のためだけに、変化しうるタイミングでこのstateを都度同期する。
     const [skkIndicator, setSkkIndicator] = useState<string | null>(null);
-    // ローカルで画面表示しているpreedit(未確定文字列・▽読み・▼候補)の表示幅(桁数)。
-    // PTYには送っていない、xterm.js上の見た目だけの表示なので、erase時はこの桁数分だけ
-    // バックスペースで消す。ひらがな・漢字等の全角文字は2桁として数える。
-    const preeditWidth = useRef(0);
+    // ローカル表示するpreedit(未確定文字列・▽読み・▼候補)。xterm.jsのバッファには書き込まず、
+    // カーソル位置に重ねるDOMオーバーレイとして描画する。バッファに触れないため、
+    // alternate screenを使うTUIアプリ(tmux/lazygit等)の再描画と競合しない。
+    const [preedit, setPreedit] = useState<{
+        text: string;
+        top: number;
+        left: number;
+        cellWidth: number;
+        cellHeight: number;
+        fontFamily: string;
+        fontSize: number;
+        color: string | undefined;
+        background: string | undefined;
+    } | null>(null);
+    // アクティブなxtermの書き込み完了イベント(onWriteParsed)の購読。
+    // PTYエコーが反映されてカーソルが動いた後にオーバーレイ位置を再計算するために使う。
+    const preeditListener = useRef<{
+        term: unknown;
+        dispose: () => void;
+    } | null>(null);
     // かな漢字変換の候補一覧ポップアップ(▼候補が複数ある場合のみ表示)。
     // カーソル位置に追従させるため、現在のページの候補+選択キーラベルに加えて
     // 画面上のピクセル座標も保持する。
@@ -63,8 +79,10 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
      * xterm.jsは公開APIとしてカーソルのピクセル位置を提供していないため、
      * 内部実装(_core._renderService)に依存する。xterm.jsのバージョンアップ時は
      * この部分の互換性を要確認。
+     * 基準は、paddingを含まない.xterm-screenの矩形にする(term.elementだと
+     * paddingの分だけセル位置がずれ、オーバーレイが本来の文字位置に重ならないため)。
      */
-    const getCursorPixelPosition = (): { top: number; left: number } | null => {
+    const getCursorCellRect = () => {
         const term = terms.current?.getActiveTerm()?.term;
         if (!term?.element) {
             return null;
@@ -74,12 +92,27 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         if (!cell) {
             return null;
         }
-        const rect = term.element.getBoundingClientRect();
+        const screen =
+            term.element.querySelector(".xterm-screen") ?? term.element;
+        const rect = screen.getBoundingClientRect();
         const { cursorX, cursorY } = term.buffer.active;
         return {
-            top: rect.top + (cursorY + 1) * cell.height,
+            top: rect.top + cursorY * cell.height,
             left: rect.left + cursorX * cell.width,
+            cellWidth: cell.width as number,
+            cellHeight: cell.height as number,
+            minLeft: rect.left,
+            maxRight: rect.right,
         };
+    };
+
+    // 候補ポップアップ用。カーソル行の1行下の位置を返す。
+    const getCursorPixelPosition = (): { top: number; left: number } | null => {
+        const cell = getCursorCellRect();
+        if (!cell) {
+            return null;
+        }
+        return { top: cell.top + cell.cellHeight, left: cell.left };
     };
 
     useEffect(() => {
@@ -109,62 +142,76 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     };
 
     /**
-     * 現在ローカルに描画しているpreeditを消去するだけの操作(新しい内容は描画しない)。
-     * PTYへの確定送出(非同期)と同じkeydownイベント内で新しいpreeditも同期的に描画すると、
-     * PTYエコーが返ってくるタイミングとローカル描画の順序が競合し、確定文字列が消えたり
-     * 表示順序が崩れたりする。確定が発生したキー入力では、これだけを呼び、新しいpreeditの
-     * 描画は次のキー入力まで持ち越す。
+     * 確定が発生したキー入力で呼ぶ。オーバーレイをいったん消すだけで、新しい内容は描画しない。
+     * 確定文字列のPTYエコーが反映される前はカーソル位置が古いままなので、ここで再描画すると
+     * 誤った位置に表示される。新しい内容(確定後に残ったバッファ等)は、エコー反映後に
+     * onWriteParsed経由のsyncPreeditDisplayで表示される。
      */
     const erasePreeditDisplay = () => {
-        if (isAlternateScreenActive()) {
-            preeditWidth.current = 0;
-            return;
-        }
-        const term = terms.current?.getActiveTerm()?.term;
-        if (term && preeditWidth.current > 0) {
-            // 保存済みカーソル位置(syncPreeditDisplayでのDECSC)へ復帰 → 空白で上書き消去 →
-            // 再度同じ位置へ復帰。\bによる相対移動は行末のpending wrap状態でズレるため使わない。
-            // JS側でcursorX/Yを読み取らないのは、term.write()が非同期処理されるため、書き込み
-            // 直後に読むと処理前の古い値を掴む可能性があるため(実際にこれが原因で描画が乱れた)。
-            term.write("\x1b8" + " ".repeat(preeditWidth.current) + "\x1b8");
-        }
-        preeditWidth.current = 0;
+        ensurePreeditListener();
+        setPreedit(null);
     };
 
     /**
-     * lazygit等、alternate screen bufferを使うフルスクリーンTUIアプリが現在アクティブかどうか。
-     * これらのアプリは画面全体を非同期・絶対座標で再描画するため、ローカルpreedit描画
-     * (相対カーソル移動によるバックスペース消去)と競合し、既に描画済みの内容を破壊して
-     * しまう(文字の上書き・穴あき)。syncPreeditDisplayで、この間はpreeditのローカル表示
-     * 自体を止めるために使う。
-     */
-    const isAlternateScreenActive = (): boolean => {
-        const term = terms.current?.getActiveTerm()?.term;
-        return term?.buffer.active.type === "alternate";
-    };
-
-    /**
-     * 現在のエンジンの表示状態(getDisplay())にあわせて、xterm.js上のpreedit表示を同期する。
-     * PTYへは一切送出しない、ローカル描画のみの操作。
-     * このキー入力でPTYへの確定送出が発生していない場合にのみ呼ぶこと
-     * (確定が発生した場合はerasePreeditDisplayのみを使う。理由は上記コメント参照)。
+     * 現在のエンジンの表示状態(getDisplay())にあわせて、カーソル位置のオーバーレイを同期する。
+     * PTYへは一切送出せず、xterm.jsのバッファにも書き込まない。
+     * 全角文字は1文字ずつセル幅の整数倍(2セル)の枠に収めて描画し、フォントの字幅に
+     * 依存せずセルと位置を揃える。行末ではみ出す場合は、画面内に収まる位置まで左へずらす。
      */
     const syncPreeditDisplay = () => {
-        erasePreeditDisplay();
-        if (isAlternateScreenActive()) {
-            return;
-        }
+        ensurePreeditListener();
         const term = terms.current?.getActiveTerm()?.term;
-        if (!term) {
+        const text = skkEngine.current.getDisplay();
+        const cell = text ? getCursorCellRect() : null;
+        if (!term || !text || !cell) {
+            setPreedit(null);
             return;
         }
-        const nextDisplay = skkEngine.current.getDisplay();
-        if (nextDisplay) {
-            // 描画開始位置をDECSCで保存してから書き込む。確定・キャンセルでpreeditWidthが
-            // 0に戻るまで、この保存位置がerasePreeditDisplayでの復帰先になる。
-            term.write("\x1b7" + nextDisplay);
+        const textWidth = displayWidth(text) * cell.cellWidth;
+        const next = {
+            text,
+            top: cell.top,
+            left: Math.max(
+                cell.minLeft,
+                Math.min(cell.left, cell.maxRight - textWidth),
+            ),
+            cellWidth: cell.cellWidth,
+            cellHeight: cell.cellHeight,
+            fontFamily: term.options.fontFamily ?? "monospace",
+            fontSize: term.options.fontSize ?? 14,
+            color: term.options.theme?.foreground,
+            background: term.options.theme?.background,
+        };
+        // 端末の出力が流れ続けている間に、同じ内容で毎回再レンダリングしないよう、
+        // 表示に影響する値が変わっていなければ前回のstateを維持する。
+        setPreedit((prev) =>
+            prev &&
+            prev.text === next.text &&
+            prev.top === next.top &&
+            prev.left === next.left &&
+            prev.cellWidth === next.cellWidth &&
+            prev.cellHeight === next.cellHeight
+                ? prev
+                : next,
+        );
+    };
+
+    /**
+     * アクティブなxtermの書き込み完了(onWriteParsed)を購読し、完了のたびにオーバーレイを再同期する。
+     * 確定文字列のPTYエコーでカーソルが動いた後に、正しい位置へ追従させるために使う。
+     * アクティブなターミナルが切り替わった場合は、購読を張り替える。
+     */
+    const ensurePreeditListener = () => {
+        const term = terms.current?.getActiveTerm()?.term;
+        if (!term || preeditListener.current?.term === term) {
+            return;
         }
-        preeditWidth.current = displayWidth(nextDisplay);
+        preeditListener.current?.dispose();
+        const disposable = term.onWriteParsed(() => syncPreeditDisplay());
+        preeditListener.current = {
+            term,
+            dispose: () => disposable.dispose(),
+        };
     };
 
     const commitToTerminal = (text: string) => {
@@ -443,6 +490,8 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         window.addEventListener("keydown", handleSkkKeydown, true);
         return () => {
             window.removeEventListener("keydown", handleSkkKeydown, true);
+            preeditListener.current?.dispose();
+            preeditListener.current = null;
         };
     }, []);
 
@@ -565,6 +614,33 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
                 {skkIndicator && (
                     <div className="skk_indicator">{skkIndicator}</div>
                 )}
+                {preedit && (
+                    <div
+                        className="skk_preedit"
+                        style={{
+                            top: preedit.top,
+                            left: preedit.left,
+                            height: preedit.cellHeight,
+                            lineHeight: `${preedit.cellHeight}px`,
+                            fontFamily: preedit.fontFamily,
+                            fontSize: preedit.fontSize,
+                            color: preedit.color,
+                            background: preedit.background,
+                        }}
+                    >
+                        {Array.from(preedit.text).map((ch, i) => (
+                            <span
+                                key={i}
+                                className="skk_preedit_char"
+                                style={{
+                                    width: displayWidth(ch) * preedit.cellWidth,
+                                }}
+                            >
+                                {ch}
+                            </span>
+                        ))}
+                    </div>
+                )}
                 {candidatePopup && (
                     <div
                         className="skk_candidate_popup"
@@ -635,6 +711,19 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
                         text-align: center;
                         pointer-events: none;
                         z-index: 100;
+                    }
+
+                    .skk_preedit {
+                        position: fixed;
+                        white-space: pre;
+                        pointer-events: none;
+                        z-index: 99;
+                    }
+
+                    .skk_preedit_char {
+                        display: inline-block;
+                        box-sizing: border-box;
+                        border-bottom: 1px solid currentColor;
                     }
 
                     .skk_candidate_popup {
