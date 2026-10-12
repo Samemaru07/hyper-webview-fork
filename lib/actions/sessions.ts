@@ -14,6 +14,7 @@ import {
     SESSION_SEARCH,
     SESSION_URL_SET,
     SESSION_URL_UNSET,
+    SESSION_SET_TAB_TITLE,
 } from "../../typings/constants/sessions";
 import type {
     HyperState,
@@ -128,6 +129,14 @@ export function clearActiveSession(): HyperActions {
 export function setSessionXtermTitle(uid: string, title: string): HyperActions {
     return {
         type: SESSION_SET_XTERM_TITLE,
+        uid,
+        title,
+    };
+}
+
+export function setTabTitle(uid: string, title: string): HyperActions {
+    return {
+        type: SESSION_SET_TAB_TITLE,
         uid,
         title,
     };

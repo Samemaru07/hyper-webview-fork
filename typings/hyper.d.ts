@@ -141,6 +141,8 @@ export type session = {
 export type sessionState = Immutable<{
     sessions: Record<string, session>;
     activeUid: string | null;
+    // タブ(ルートグループ)のuidをキーにした、ユーザー指定のタブ名
+    tabTitles: Record<string, string>;
     write?: any;
 }>;
 
@@ -241,6 +243,7 @@ export type TabProps = {
     onClick?: (event: React.MouseEvent<HTMLElement, MouseEvent>) => void;
     onClose: () => void;
     onSelect: () => void;
+    onRename: (title: string) => void;
     text: string;
 } & extensionProps;
 
@@ -257,6 +260,7 @@ export type TabsProps = {
     backgroundColor: string;
     onChange: (uid: string) => void;
     onClose: (uid: string) => void;
+    onRename: (uid: string, title: string) => void;
     fullScreen: boolean;
     defaultProfile: string;
     profiles: configOptions["profiles"];

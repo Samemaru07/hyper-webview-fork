@@ -13,6 +13,7 @@ import {
     SESSION_SEARCH,
     SESSION_URL_SET,
     SESSION_URL_UNSET,
+    SESSION_SET_TAB_TITLE,
 } from "../../typings/constants/sessions";
 import type {
     sessionState,
@@ -25,6 +26,7 @@ import { decorateSessionsReducer } from "../utils/plugins";
 const initialState: sessionState = Immutable<Mutable<sessionState>>({
     sessions: {},
     activeUid: null,
+    tabTitles: {},
 });
 
 function Session(obj: Immutable.DeepPartial<session>) {
@@ -79,6 +81,22 @@ const reducer: ISessionReducer = (state = initialState, action) => {
 
         case SESSION_URL_SET:
             return state.setIn(["sessions", action.uid, "url"], action.url);
+
+        case SESSION_SET_TAB_TITLE: {
+            const title = action.title.trim();
+            if (title === "") {
+                // 空文字での確定は、ユーザー指定の名前を消してシェル由来のタイトルに戻す
+                return state.updateIn(
+                    ["tabTitles"],
+                    (tabTitles: (typeof state)["tabTitles"]) => {
+                        const tabTitles_ = tabTitles.asMutable();
+                        delete tabTitles_[action.uid];
+                        return tabTitles_;
+                    },
+                );
+            }
+            return state.setIn(["tabTitles", action.uid], title);
+        }
 
         case SESSION_URL_UNSET:
             return state.setIn(["sessions", action.uid, "url"], undefined);

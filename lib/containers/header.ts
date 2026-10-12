@@ -10,6 +10,7 @@ import {
     minimize,
     close,
 } from "../actions/header";
+import { setTabTitle } from "../actions/sessions";
 import { requestTermGroup } from "../actions/term-groups";
 import Header from "../components/header";
 import { getRootGroups } from "../selectors";
@@ -23,6 +24,7 @@ const getActiveRootGroup = ({ termGroups }: HyperState) =>
 const getActiveSessions = ({ termGroups }: HyperState) =>
     termGroups.activeSessions;
 const getActivityMarkers = ({ ui }: HyperState) => ui.activityMarkers;
+const getTabTitles = ({ sessions }: HyperState) => sessions.tabTitles;
 const getTabs = createSelector(
     [
         getSessions,
@@ -30,14 +32,23 @@ const getTabs = createSelector(
         getActiveSessions,
         getActiveRootGroup,
         getActivityMarkers,
+        getTabTitles,
     ],
-    (sessions, rootGroups, activeSessions, activeRootGroup, activityMarkers) =>
+    (
+        sessions,
+        rootGroups,
+        activeSessions,
+        activeRootGroup,
+        activityMarkers,
+        tabTitles,
+    ) =>
         rootGroups.map((t): ITab => {
             const activeSessionUid = activeSessions[t.uid];
             const session = sessions[activeSessionUid];
             return {
                 uid: t.uid,
-                title: session.title,
+                // ユーザーが付けた名前を優先し、無ければシェル由来のタイトルを使う
+                title: tabTitles[t.uid] || session.title,
                 isActive: t.uid === activeRootGroup,
                 hasActivity: activityMarkers[session.uid],
             };
@@ -93,6 +104,10 @@ const mapDispatchToProps = (dispatch: HyperDispatch) => {
 
         openNewTab: (profile: string) => {
             dispatch(requestTermGroup(undefined, profile));
+        },
+
+        onRenameTab: (uid: string, title: string) => {
+            dispatch(setTabTitle(uid, title));
         },
     };
 };
