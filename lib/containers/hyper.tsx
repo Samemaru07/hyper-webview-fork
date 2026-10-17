@@ -1,7 +1,15 @@
+import { join } from "path";
 import { pathToFileURL } from "url";
 
-import React, { forwardRef, useEffect, useRef, useState } from "react";
+import React, {
+    forwardRef,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from "react";
 
+import { app } from "@electron/remote";
 import Color from "color";
 import Mousetrap from "mousetrap";
 import type { MousetrapInstance } from "mousetrap";
@@ -20,7 +28,10 @@ import {
     shouldPreventDefault,
 } from "../command-registry";
 import type Terms from "../components/terms";
-import { preloadLargeDictionary } from "../skk/dictionary";
+import {
+    preloadLargeDictionary,
+    setUserDictionaryPath,
+} from "../skk/dictionary";
 import {
     CANDIDATE_PAGE_LABELS,
     CANDIDATE_PAGE_SIZE,
@@ -35,10 +46,61 @@ import TermsContainer from "./terms";
 
 const isMac = /Mac/.test(navigator.userAgent);
 
+// 辞書登録中の1つ分の入力状態。
+type RegistrationFrame = {
+    reading: string;
+    text: string;
+    // textの中でのカーソル位置(先頭からの文字数。サロゲートペアは1文字として数える)
+    cursor: number;
+    engine: SkkEngine;
+};
+
+// カーソル位置に文字列を挿入し、カーソルを挿入した文字列の後ろへ進める。
+const insertAtCursor = (frame: RegistrationFrame, inserted: string) => {
+    if (!inserted) {
+        return;
+    }
+    const insertedChars = Array.from(inserted);
+    const chars = Array.from(frame.text);
+    chars.splice(frame.cursor, 0, ...insertedChars);
+    frame.text = chars.join("");
+    frame.cursor += insertedChars.length;
+};
+
+// カーソルの直前の1文字を削除する。
+const deleteBeforeCursor = (frame: RegistrationFrame) => {
+    if (frame.cursor === 0) {
+        return;
+    }
+    const chars = Array.from(frame.text);
+    chars.splice(frame.cursor - 1, 1);
+    frame.text = chars.join("");
+    frame.cursor -= 1;
+};
+
+// カーソルの直後の1文字を削除する。カーソル位置は変わらない。
+const deleteAtCursor = (frame: RegistrationFrame) => {
+    const chars = Array.from(frame.text);
+    if (frame.cursor >= chars.length) {
+        return;
+    }
+    chars.splice(frame.cursor, 1);
+    frame.text = chars.join("");
+};
+
+// ユーザ辞書の保存先を、Hyperの設定ファイル(hyper.json)と同じuserDataディレクトリに設定する
+try {
+    setUserDictionaryPath(
+        join(app.getPath("userData"), "skk-user-dictionary.json"),
+    );
+} catch (error) {
+    console.error("ユーザ辞書の保存先を設定できませんでした", error);
+}
+
 const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
     const mousetrap = useRef<MousetrapInstance | null>(null);
     const terms = useRef<Terms | null>(null);
-    const skkEngine = useRef(new SkkEngine());
+    const skkEngine = useRef(new SkkEngine(undefined, undefined, true));
     const activeSessionRef = useRef(props.activeSession);
     const sendSessionDataRef = useRef(props.sendSessionData);
     // 画面右下に表示するSKKモードインジケーター。null(英字入力)の場合は非表示。
@@ -65,6 +127,20 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         term: unknown;
         dispose: () => void;
     } | null>(null);
+    // 辞書登録の入れ子(登録中にさらに辞書登録が必要になる場合)を、スタックで管理する。
+    // 末尾が現在の登録で、各登録は専用のエンジンを持つ(登録中の入力でも漢字変換を使えるように、
+    // メインのエンジンとは別にする)。keydownハンドラは初回レンダリング時のクロージャが
+    // 残り続けるため、同期的に読み書きできるようrefで持つ。
+    const registrationStack = useRef<RegistrationFrame[]>([]);
+    // 登録バーの表示用。depthは入れ子の深さ。
+    const [registrationView, setRegistrationView] = useState<{
+        reading: string;
+        // カーソルより前と後ろの文字列。変換中の文字(pending)は、その間に表示する。
+        before: string;
+        after: string;
+        pending: string;
+        depth: number;
+    } | null>(null);
     // かな漢字変換の候補一覧ポップアップ(▼候補が複数ある場合のみ表示)。
     // カーソル位置に追従させるため、現在のページの候補+選択キーラベルに加えて
     // 画面上のピクセル座標も保持する。
@@ -72,7 +148,17 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         pageItems: { label: string; candidate: string; selected: boolean }[];
         top: number;
         left: number;
+        // 辞書登録中の候補ポップアップかどうか。trueの場合、端末のカーソル位置ではなく、
+        // 登録バーの近く(popupAnchor)に表示する。
+        inRegistration: boolean;
     } | null>(null);
+    // 辞書登録中の候補ポップアップの表示位置。登録バーのレイアウトが確定してから計算する。
+    const [popupAnchor, setPopupAnchor] = useState<{
+        left: number;
+        bottom: number;
+    } | null>(null);
+    const registrationBarRef = useRef<HTMLDivElement>(null);
+    const registrationPendingRef = useRef<HTMLSpanElement>(null);
 
     /**
      * xterm.js上のカーソル位置(セル座標)を、画面上のピクセル座標に変換する。
@@ -123,6 +209,28 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
         sendSessionDataRef.current = props.sendSessionData;
     }, [props.sendSessionData]);
 
+    // 辞書登録中の候補ポップアップを、登録バーの変換中の文字の真上に置く。
+    // 登録バーはstate更新のあとに描画されるため、DOMの位置は描画後でないと測れない。
+    useLayoutEffect(() => {
+        const bar = registrationBarRef.current;
+        if (!candidatePopup?.inRegistration || !bar) {
+            setPopupAnchor(null);
+            return;
+        }
+        const barRect = bar.getBoundingClientRect();
+        const pendingRect =
+            registrationPendingRef.current?.getBoundingClientRect();
+        const next = {
+            left: pendingRect?.left ?? barRect.left,
+            bottom: window.innerHeight - barRect.top + 4,
+        };
+        setPopupAnchor((prev) =>
+            prev && prev.left === next.left && prev.bottom === next.bottom
+                ? prev
+                : next,
+        );
+    }, [candidatePopup, registrationView]);
+
     /**
      * 端末上での表示幅(桁数)を計算する。全角(ひらがな・カタカナ・CJK統合漢字・全角記号)は2、
      * それ以外(ASCIIのローマ字バッファ等)は1として数える簡易実装。
@@ -160,6 +268,11 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
      */
     const syncPreeditDisplay = () => {
         ensurePreeditListener();
+        // 辞書登録中は、読みを登録バーに表示するので、カーソル位置のpreeditは出さない
+        if (registrationStack.current.length > 0) {
+            setPreedit(null);
+            return;
+        }
         const term = terms.current?.getActiveTerm()?.term;
         const text = skkEngine.current.getDisplay();
         const cell = text ? getCursorCellRect() : null;
@@ -226,12 +339,16 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
      * skkEngineの状態はrefで保持しているため、変化しうる操作の後は都度これを呼ぶ必要がある。
      */
     const updateSkkOverlays = () => {
-        if (skkEngine.current.getMode() !== "kana") {
+        // 辞書登録中は、登録用エンジンの状態をインジケーター・候補ポップアップに反映する
+        const stack = registrationStack.current;
+        const engine =
+            stack.length > 0 ? stack[stack.length - 1].engine : skkEngine.current;
+        if (engine.getMode() !== "kana") {
             setSkkIndicator(null);
             setCandidatePopup(null);
             return;
         }
-        switch (skkEngine.current.getSubMode()) {
+        switch (engine.getSubMode()) {
             case "henkan-reading":
                 setSkkIndicator("▽");
                 break;
@@ -240,16 +357,21 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
                 break;
             default:
                 setSkkIndicator(
-                    skkEngine.current.getScript() === "katakana" ? "ア" : "あ",
+                    engine.getScript() === "katakana" ? "ア" : "あ",
                 );
         }
 
-        const candidateList = skkEngine.current.getCandidateList();
+        const candidateList = engine.getCandidateList();
         if (!candidateList) {
             setCandidatePopup(null);
             return;
         }
-        const position = getCursorPixelPosition();
+        // 辞書登録中は、端末のカーソル位置ではなく登録バーの近くに表示する。
+        // 位置は、登録バーが描画されたあとのuseLayoutEffectで計算する。
+        const inRegistration = stack.length > 0;
+        const position = inRegistration
+            ? { top: 0, left: 0 }
+            : getCursorPixelPosition();
         if (!position) {
             setCandidatePopup(null);
             return;
@@ -268,7 +390,165 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
             pageItems,
             top: position.top,
             left: position.left,
+            inRegistration,
         });
+    };
+
+    const updateRegistrationView = () => {
+        const stack = registrationStack.current;
+        const frame = stack[stack.length - 1];
+        if (!frame) {
+            setRegistrationView(null);
+            return;
+        }
+        const chars = Array.from(frame.text);
+        setRegistrationView({
+            reading: frame.reading,
+            before: chars.slice(0, frame.cursor).join(""),
+            after: chars.slice(frame.cursor).join(""),
+            pending: frame.engine.getDisplay(),
+            depth: stack.length,
+        });
+    };
+
+    const startRegistration = (reading: string) => {
+        // 登録ごとに新しいエンジンを用意し、かな入力モードにしておく
+        const engine = new SkkEngine(undefined, undefined, true);
+        engine.toggleMode();
+        registrationStack.current.push({ reading, text: "", cursor: 0, engine });
+        syncPreeditDisplay();
+        updateRegistrationView();
+        updateSkkOverlays();
+    };
+
+    const finishRegistration = (confirmed: boolean) => {
+        const stack = registrationStack.current;
+        const frame = stack.pop();
+        if (!frame) {
+            return;
+        }
+        const word = frame.text.trim();
+        // 1つ外側の登録(無ければメインのエンジン)
+        const parent = stack.length > 0 ? stack[stack.length - 1] : null;
+        if (confirmed && word) {
+            if (parent) {
+                // 入れ子の登録: 登録した語を、外側の登録中の入力に追加する
+                insertAtCursor(parent, parent.engine.commitRegistration(word));
+            } else {
+                const committed = skkEngine.current.commitRegistration(word);
+                erasePreeditDisplay();
+                commitToTerminal(committed);
+            }
+        } else if (!parent) {
+            // 中止または空の登録: skkEngineは▽読み入力(または▼候補選択)の状態のまま残るので、続きから編集できる
+            syncPreeditDisplay();
+        }
+        updateRegistrationView();
+        updateSkkOverlays();
+    };
+
+    // 辞書登録中のキー入力。すべてここで処理し、端末(PTY)へは一切渡さない。
+    const handleRegistrationKeydown = (e: KeyboardEvent) => {
+        const stack = registrationStack.current;
+        const frame = stack[stack.length - 1];
+        if (!frame) {
+            return;
+        }
+        const engine = frame.engine;
+        (e as any).catched = true;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.ctrlKey || e.altKey || e.metaKey) {
+            return;
+        }
+
+        const append = (text: string) => {
+            insertAtCursor(frame, text);
+        };
+        const subMode = engine.getSubMode();
+
+        if (e.key === "Escape") {
+            if (subMode !== "direct") {
+                engine.cancel();
+            } else {
+                finishRegistration(false);
+                return;
+            }
+        } else if (e.key === "Enter") {
+            if (subMode !== "direct") {
+                append(engine.confirm());
+            } else {
+                append(engine.commitPendingBuffer());
+                finishRegistration(true);
+                return;
+            }
+        } else if (e.key === " ") {
+            if (subMode !== "direct") {
+                append(engine.space());
+                // 登録中の変換でも、辞書に無い読みや候補を使い切った場合は、さらに内側の辞書登録に入る
+                const nestedReading = engine.takeRegistrationRequest();
+                if (nestedReading !== null) {
+                    startRegistration(nestedReading);
+                    return;
+                }
+            } else {
+                append(engine.commitPendingBuffer() + " ");
+            }
+        } else if (e.key === "Backspace") {
+            if (engine.hasPendingBuffer() || subMode !== "direct") {
+                engine.backspace();
+            } else {
+                deleteBeforeCursor(frame);
+            }
+        } else if (
+            (e.key === "ArrowLeft" || e.key === "ArrowRight") &&
+            subMode === "direct" &&
+            !engine.hasPendingBuffer()
+        ) {
+            // 登録中の文字列の中でカーソルを動かす。変換中や未確定のローマ字がある間は動かさない
+            const delta = e.key === "ArrowLeft" ? -1 : 1;
+            frame.cursor = Math.min(
+                Math.max(frame.cursor + delta, 0),
+                Array.from(frame.text).length,
+            );
+        } else if (
+            e.key === "Delete" &&
+            subMode === "direct" &&
+            !engine.hasPendingBuffer()
+        ) {
+            // カーソルの直後の1文字を削除する。変換中や未確定のローマ字がある間は何もしない
+            deleteAtCursor(frame);
+        } else if (e.key === "x" && subMode === "henkan-select") {
+            engine.previousCandidate();
+        } else if (
+            CANDIDATE_PAGE_LABELS.includes(e.key) &&
+            subMode === "henkan-select" &&
+            engine.getCandidateList() !== null
+        ) {
+            append(engine.selectCandidateByLabel(e.key));
+        } else if (
+            isSkkInterceptableKey(e.key) ||
+            engine.canHandleSymbolShortcut(e.key)
+        ) {
+            const isUpper = e.key.length === 1 && e.key !== e.key.toLowerCase();
+            append(
+                isUpper
+                    ? engine.inputUpper(e.key.toLowerCase())
+                    : engine.input(e.key.toLowerCase()),
+            );
+        } else if (e.key.length === 1) {
+            // 数字・記号等、SKKの対象外の1文字。変換中の内容を確定してから、そのまま追加する
+            let out = "";
+            if (subMode !== "direct") {
+                out = engine.confirm();
+                if (!out) {
+                    engine.reset();
+                }
+            }
+            append(out + engine.commitPendingBuffer() + e.key);
+        }
+        updateRegistrationView();
+        updateSkkOverlays();
     };
 
     // かな入力モードでの母音・子音・句読点・長音符の確定、▽漢字変換モード(読み入力・辞書引き・
@@ -293,6 +573,12 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
             e.key === "Alt" ||
             e.key === "Meta"
         ) {
+            return;
+        }
+
+        // 辞書登録中は、登録用のハンドラに処理を任せる
+        if (registrationStack.current.length > 0) {
+            handleRegistrationKeydown(e);
             return;
         }
 
@@ -359,6 +645,13 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
             (e as any).catched = true;
             e.preventDefault();
             e.stopPropagation();
+            // 辞書に候補が無い読みの場合は、読みを確定せず辞書登録モードに入る
+            const registrationReading =
+                skkEngine.current.takeRegistrationRequest();
+            if (registrationReading !== null) {
+                startRegistration(registrationReading);
+                return;
+            }
             if (committed) {
                 erasePreeditDisplay();
                 commitToTerminal(committed);
@@ -622,6 +915,29 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
                 {skkIndicator && (
                     <div className="skk_indicator">{skkIndicator}</div>
                 )}
+                {registrationView && (
+                    <div className="skk_registration" ref={registrationBarRef}>
+                        <span className="skk_registration_label">
+                            {"[".repeat(registrationView.depth)}
+                            辞書登録
+                            {"]".repeat(registrationView.depth)}
+                        </span>
+                        <span className="skk_registration_reading">
+                            {registrationView.reading}
+                        </span>
+                        <span className="skk_registration_text">
+                            {registrationView.before}
+                            <span
+                                className="skk_registration_pending"
+                                ref={registrationPendingRef}
+                            >
+                                {registrationView.pending}
+                            </span>
+                            <span className="skk_registration_cursor" />
+                            {registrationView.after}
+                        </span>
+                    </div>
+                )}
                 {preedit && (
                     <div
                         className="skk_preedit"
@@ -652,10 +968,19 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
                 {candidatePopup && (
                     <div
                         className="skk_candidate_popup"
-                        style={{
-                            top: candidatePopup.top,
-                            left: candidatePopup.left,
-                        }}
+                        style={
+                            candidatePopup.inRegistration
+                                ? popupAnchor
+                                    ? {
+                                          left: popupAnchor.left,
+                                          bottom: popupAnchor.bottom,
+                                      }
+                                    : { visibility: "hidden" as const }
+                                : {
+                                      top: candidatePopup.top,
+                                      left: candidatePopup.left,
+                                  }
+                        }
                     >
                         {candidatePopup.pageItems.map(
                             ({ label, candidate, selected }) => (
@@ -732,6 +1057,47 @@ const Hyper = forwardRef<HTMLDivElement, HyperProps>((props, ref) => {
                         display: inline-block;
                         box-sizing: border-box;
                         border-bottom: 1px solid currentColor;
+                    }
+
+                    .skk_registration {
+                        position: absolute;
+                        left: 10px;
+                        right: 70px;
+                        bottom: 10px;
+                        padding: 4px 8px;
+                        border: 1px solid rgba(255, 255, 255, 0.3);
+                        border-radius: 4px;
+                        background: rgba(0, 0, 0, 0.85);
+                        color: #fff;
+                        font-family: monospace;
+                        font-size: 14px;
+                        white-space: pre;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        pointer-events: none;
+                        z-index: 100;
+                    }
+
+                    .skk_registration_label {
+                        margin-right: 8px;
+                        color: #888;
+                    }
+
+                    .skk_registration_reading {
+                        margin-right: 8px;
+                        color: #aaa;
+                    }
+
+                    .skk_registration_pending {
+                        text-decoration: underline;
+                    }
+
+                    .skk_registration_cursor {
+                        display: inline-block;
+                        width: 0;
+                        height: 1.1em;
+                        border-left: 1px solid #fff;
+                        vertical-align: text-bottom;
                     }
 
                     .skk_candidate_popup {
