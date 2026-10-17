@@ -1,6 +1,6 @@
 import { toKana, toKatakana } from "wanakana";
 
-import { lookupCandidates } from "./dictionary";
+import { lookupCandidates, registerUserEntry } from "./dictionary";
 
 export type SkkMode = "ascii" | "kana";
 
@@ -169,12 +169,17 @@ export class SkkEngine {
     // 直近の辞書引きで使ったキー(reading、または送り仮名ありならreading+okuriConsonant)。
     // 確定時にCandidateHistoryStoreへ記録する際に使う。
     private historyKey: string | null = null;
+    // 辞書に候補が無い読みでspace()が押されたときに、登録を要求している読み。
+    // hyper.tsx側がtakeRegistrationRequest()で受け取る。
+    private registrationReading: string | null = null;
 
     constructor(
         private readonly lookup: (
             reading: string,
         ) => string[] = lookupCandidates,
         private readonly historyStore: CandidateHistoryStore = defaultHistoryStore,
+        // trueの場合、候補が無い読みでspace()が押されたとき、読みをそのまま確定せず辞書登録を要求する
+        private readonly allowRegistration = false,
     ) {}
 
     getMode(): SkkMode {
@@ -199,6 +204,38 @@ export class SkkEngine {
 
     hasPendingBuffer(): boolean {
         return this.buffer.length > 0;
+    }
+
+    /**
+     * 辞書登録の要求があれば、その読みを返して要求を消す。無ければnull。
+     * space()の直後に呼び出し側が確認する。
+     */
+    takeRegistrationRequest(): string | null {
+        const reading = this.registrationReading;
+        this.registrationReading = null;
+        return reading;
+    }
+
+    /**
+     * 登録した変換結果をユーザ辞書へ保存し、変換状態を終了して、確定する文字列を返す。
+     * 読みは▽読み入力中のもの(送り仮名なし)を使う。
+     */
+    commitRegistration(word: string): string {
+        const reading = this.reading;
+        this.resetHenkan();
+        registerUserEntry(reading, word);
+        return word;
+    }
+
+    /**
+     * direct中に残っている未確定ローマ字を、最終解決して返す(単独の"n"は「ん」になる)。
+     * direct以外、またはバッファが空なら空文字を返す。
+     */
+    commitPendingBuffer(): string {
+        if (this.subMode !== "direct" || !this.buffer) {
+            return "";
+        }
+        return this.applyScript(this.resolveTrailingBuffer());
     }
 
     /**
@@ -277,6 +314,7 @@ export class SkkEngine {
         this.okuriConsonant = null;
         this.okuriKana = "";
         this.historyKey = null;
+        this.registrationReading = null;
     }
 
     /**
@@ -558,9 +596,9 @@ export class SkkEngine {
      * スペースキー。
      * - henkan-reading中: 辞書引きを実行し、henkan-selectへ遷移する。
      *   候補が0件の場合は読みをそのままかなとして確定し、directに戻る(戻り値としてその文字列を返す)。
-     * - henkan-select中: 次のページへ送る(CANDIDATE_PAGE_SIZE件単位。末尾なら先頭ページに循環)。
-     *   候補がCANDIDATE_PAGE_SIZE件以下の場合、実質的に同じページに留まり続ける(従来の
-     *   1件ずつの巡回よりも、ページ送り自体は変わらない点に注意)。
+     * - henkan-select中: 次のページへ送る(CANDIDATE_PAGE_SIZE件単位)。候補を使い切った場合、
+     *   allowRegistrationがtrueで送り仮名なしなら辞書登録を要求し(本家SKKと同じ挙動)、
+     *   それ以外は先頭候補に循環する。
      * - direct中: このメソッドは呼ばれない想定(呼び出し側でスペースを素通しする)。
      */
     space(): string {
@@ -579,6 +617,12 @@ export class SkkEngine {
                 this.lookup(this.reading),
             );
             if (candidates.length === 0) {
+                if (this.allowRegistration) {
+                    // 辞書登録へ移行する。読みはこのまま保持し、登録を中止した場合に
+                    // ▽の続きから再開できるようにする。
+                    this.registrationReading = this.reading;
+                    return "";
+                }
                 const literal = this.applyScript(this.reading);
                 this.resetHenkan();
                 return literal;
@@ -591,14 +635,23 @@ export class SkkEngine {
         }
         if (this.subMode === "henkan-select") {
             // インライン段階: 1件ずつ次の候補へ。INLINE_CANDIDATE_COUNT件目を超えるとページ段階に入る。
-            // ページ段階: 次のページの先頭へ。どちらも末尾を超えたら先頭候補に循環する。
+            // ページ段階: 次のページの先頭へ。どちらも末尾を超えたら、辞書登録の要求か先頭候補への循環になる。
             const pageStart = this.getPageStart();
             const nextIndex =
                 pageStart === null
                     ? this.candidateIndex + 1
                     : pageStart + CANDIDATE_PAGE_SIZE;
-            this.candidateIndex =
-                nextIndex < this.candidates.length ? nextIndex : 0;
+            if (nextIndex < this.candidates.length) {
+                this.candidateIndex = nextIndex;
+                return "";
+            }
+            if (this.allowRegistration && this.okuriConsonant === null) {
+                // 候補を使い切ったら、辞書登録へ移行する(本家SKKと同じ挙動)。
+                // 登録を中止した場合は、最後の候補を選択した状態のまま戻る。
+                this.registrationReading = this.reading;
+                return "";
+            }
+            this.candidateIndex = 0;
             return "";
         }
         return "";
